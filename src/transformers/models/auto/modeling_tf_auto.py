@@ -42,6 +42,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "TFData2VecVisionModel"),
         ("deberta", "TFDebertaModel"),
         ("deberta-v2", "TFDebertaV2Model"),
+        ("detr", "TFDetrModel"),
         ("distilbert", "TFDistilBertModel"),
         ("dpr", "TFDPRQuestionEncoder"),
         ("electra", "TFElectraModel"),
@@ -207,6 +208,15 @@ TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
     ]
 )
+
+
+MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Object Detection mapping
+        ("detr", "TFDetrForObjectDetection"),
+    ]
+)
+
 
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
