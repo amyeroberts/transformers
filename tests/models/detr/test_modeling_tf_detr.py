@@ -31,7 +31,7 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_timm_available():
     import torch
 
-    from transformers import DetrForObjectDetection, DetrForSegmentation, DetrModel
+    from transformers import TFDetrForObjectDetection, TFDetrForSegmentation, TFDetrModel
 
 
 if is_vision_available():
@@ -125,7 +125,7 @@ class DetrModelTester:
         return config, inputs_dict
 
     def create_and_check_detr_model(self, config, pixel_values, pixel_mask, labels):
-        model = DetrModel(config=config)
+        model = TFDetrModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -137,7 +137,7 @@ class DetrModelTester:
         )
 
     def create_and_check_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
-        model = DetrForObjectDetection(config=config)
+        model = TFDetrForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -158,9 +158,9 @@ class DetrModelTester:
 class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            DetrModel,
-            DetrForObjectDetection,
-            DetrForSegmentation,
+            TFDetrModel,
+            TFDetrForObjectDetection,
+            TFDetrForSegmentation,
         )
         if is_timm_available()
         else ()
@@ -176,7 +176,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["DetrForObjectDetection", "DetrForSegmentation"]:
+            if model_class.__name__ in ["TFDetrForObjectDetection", "TFDetrForSegmentation"]:
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -279,10 +279,10 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Object Detection model returns pred_logits and pred_boxes
-                if model_class.__name__ == "DetrForObjectDetection":
+                if model_class.__name__ == "TFDetrForObjectDetection":
                     correct_outlen += 2
                 # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
-                if model_class.__name__ == "DetrForSegmentation":
+                if model_class.__name__ == "TFDetrForSegmentation":
                     correct_outlen += 3
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
@@ -406,7 +406,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "DetrForObjectDetection":
+            if model_class.__name__ == "TFDetrForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -458,7 +458,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         return DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
 
     def test_inference_no_head(self):
-        model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
+        model = TFDetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -475,13 +475,13 @@ class DetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     def test_inference_object_detection_head(self):
-        model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(torch_device)
+        model = TFDetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
+        encoding = feature_extractor(images=image, return_tensors="pt")
+        pixel_values = encoding["pixel_values"]
+        pixel_mask = encoding["pixel_mask"]
 
         with torch.no_grad():
             outputs = model(pixel_values, pixel_mask)
@@ -501,7 +501,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
     def test_inference_panoptic_segmentation_head(self):
-        model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic").to(torch_device)
+        model = TFDetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

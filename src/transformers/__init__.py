@@ -638,6 +638,16 @@ else:
             "DetrPreTrainedModel",
         ]
     )
+    # FIXME
+    _import_structure["models.detr"].extend(
+        [
+            "TF_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFDetrForObjectDetection",
+            "TFDetrForSegmentation",
+            "TFDetrModel",
+            "TFDetrPreTrainedModel",
+        ]
+    )
 
 try:
     if not is_scatter_available():
