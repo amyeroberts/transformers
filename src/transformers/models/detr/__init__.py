@@ -29,20 +29,10 @@ from ...utils import (
 
 _import_structure = {"configuration_detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"]}
 
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
+if is_vision_available():
     _import_structure["feature_extraction_detr"] = ["DetrFeatureExtractor"]
 
-try:
-    if not is_timm_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
+if is_timm_available():
     _import_structure["modeling_detr"] = [
         "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DetrForObjectDetection",
@@ -51,13 +41,8 @@ else:
         "DetrPreTrainedModel",
     ]
 
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_detr"] = [
+if is_tf_available():
+    _import_structure["modeling_tf_detr"] = [
         "TF_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDetrForObjectDetection",
         "TFDetrForSegmentation",

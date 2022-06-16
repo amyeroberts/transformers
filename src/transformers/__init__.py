@@ -638,7 +638,16 @@ else:
             "DetrPreTrainedModel",
         ]
     )
+
+# TF vision objects
+try:
+    if not (is_tf_available() and is_vision_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_tf_objects
     # FIXME
+    _import_structure["utils.dummy_tf_objects"] = [name for name in dir(dummy_tf_objects) if not name.startswith("_")]
+else:
     _import_structure["models.detr"].extend(
         [
             "TF_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4419,6 +4428,13 @@ if TYPE_CHECKING:
             TFDebertaV2ForTokenClassification,
             TFDebertaV2Model,
             TFDebertaV2PreTrainedModel,
+        )
+        from .models.detr import (
+            TF_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDetrForObjectDetection,
+            TFDetrForSegmentation,
+            TFDetrModel,
+            TFDetrPreTrainedModel,
         )
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
