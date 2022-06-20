@@ -15,7 +15,6 @@
 """ Finetuning any 🤗 Transformers model for image classification."""
 
 import logging
-import json
 import os
 import sys
 from dataclasses import dataclass, field
@@ -23,44 +22,30 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import tensorflow as tf
-from keras import backend
-
-import datasets
 from datasets import load_dataset
 
-from huggingface_hub import Repository
-
 import transformers
+from keras import backend
 from transformers import (
-    AutoConfig,
-    AutoFeatureExtractor,
-    TFAutoModelForImageClassification,
-    AutoConfig,
-    DefaultDataCollator,
-    HfArgumentParser,
-    TFTrainingArguments,
-    create_optimizer,
-    set_seed,
     TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     AutoConfig,
+    AutoFeatureExtractor,
     DefaultDataCollator,
     HfArgumentParser,
+    TFAutoModelForImageClassification,
     TFTrainingArguments,
     create_optimizer,
     set_seed,
 )
 from transformers.keras_callbacks import PushToHubCallback
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import get_full_repo_name, send_example_telemetry
-from transformers.utils.dummy_tf_objects import PushToHubCallback
+from transformers.utils import send_example_telemetry
 from transformers.utils.versions import require_version
-from transformers import DefaultDataCollator
-from transformers.keras_callbacks import PushToHubCallback
 
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output from TF
 import tensorflow as tf  # noqa: E402
+
 
 logger = logging.getLogger(__name__)
 
@@ -135,9 +120,9 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."}) #FIXME - dir or file?
+    train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."})
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
-    validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."}) #FIXME - dir or file?
+    validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
     validation_file: Optional[str] = field(
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
@@ -146,8 +131,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     train_val_split: Optional[float] = field(
-        default=0.15,
-        metadata={"help": "Percent to split off of train for validation"}
+        default=0.15, metadata={"help": "Percent to split off of train for validation"}
     )
     block_size: Optional[int] = field(
         default=None,
@@ -281,25 +265,6 @@ def main():
         label2id[label] = str(i)
         id2label[str(i)] = label
 
-    # Load the accuracy metric from the datasets package
-    metric = datasets.load_metric("accuracy")
-
-    # Handle the repository creation
-    if training_args.push_to_hub:
-        if training_args.hub_model_id is None:
-            repo_name = get_full_repo_name(Path(training_args.output_dir).name, token=training_args.hub_token)
-        else:
-            repo_name = training_args.hub_model_id
-        repo = Repository(training_args.output_dir, clone_from=repo_name)
-
-        with open(os.path.join(training_args.output_dir, ".gitignore"), "w+") as gitignore:
-            if "step_*" not in gitignore:
-                gitignore.write("step_*\n")
-            if "epoch_*" not in gitignore:
-                gitignore.write("epoch_*\n")
-    elif training_args.output_dir is not None:
-        os.makedirs(training_args.output_dir, exist_ok=True)
-
     # Load model config and feature extractor
     config = AutoConfig.from_pretrained(
         model_path,
@@ -325,8 +290,7 @@ def main():
         target_width = int(size * width / height) if width > height else size
         return (target_height, target_width)
 
-
-    def get_random_crop_size(img, scale=(0.08, 1.0), ratio=(3/4, 4/3)):
+    def get_random_crop_size(img, scale=(0.08, 1.0), ratio=(3 / 4, 4 / 3)):
         height, width, channels = img.shape
         img_ratio = width / height
         crop_log_ratio = np.random.uniform(*np.log(ratio), size=1)
@@ -342,7 +306,6 @@ def main():
             crop_height = int(crop_width / crop_ratio)
         return (crop_height, crop_width, channels)
 
-
     def train_transforms(image):
         image = tf.keras.utils.img_to_array(image)
         # Note - this augmentation isn't exactly the same in the PyTorch
@@ -355,30 +318,19 @@ def main():
         # and ratio range
         image = tf.image.random_crop(image, size=get_random_crop_size(image))
         image = tf.image.resize(
-            image,
-            size=(feature_extractor.size, feature_extractor.size),
-            method=tf.image.ResizeMethod.BILINEAR
+            image, size=(feature_extractor.size, feature_extractor.size), method=tf.image.ResizeMethod.BILINEAR
         )
         image = tf.image.random_flip_left_right(image)
         image /= 255
-        image = normalize_img(
-            image,
-            mean=feature_extractor.image_mean,
-            std=feature_extractor.image_std
-        )
+        image = normalize_img(image, mean=feature_extractor.image_mean, std=feature_extractor.image_std)
         # All image models take channels first format: BCHW
         image = tf.transpose(image, (2, 0, 1))
         return image
 
-
     def val_transforms(image):
         image = tf.keras.utils.img_to_array(image)
         resize_shape = get_resize_shape(image, feature_extractor.size)
-        image = tf.image.resize(
-            image,
-            size=resize_shape,
-            method=tf.image.ResizeMethod.BILINEAR
-        )
+        image = tf.image.resize(image, size=resize_shape, method=tf.image.ResizeMethod.BILINEAR)
         image = tf.image.crop_to_bounding_box(
             image,
             offset_height=image.shape[0] // 2 - feature_extractor.size // 2,
@@ -387,44 +339,36 @@ def main():
             target_width=feature_extractor.size,
         )
         image /= 255
-        image = normalize_img(
-            image,
-            mean=feature_extractor.image_mean,
-            std=feature_extractor.image_std
-        )
+        image = normalize_img(image, mean=feature_extractor.image_mean, std=feature_extractor.image_std)
         # All image models take channels first format: BCHW
         image = tf.transpose(image, (2, 0, 1))
         return image
 
-
     def preprocess_train(example_batch):
         """Apply train_transforms across a batch."""
-        pixel_values = [
-            train_transforms(image.convert("RGB")) for image in example_batch["image"]
-        ]
-        return {'pixel_values': pixel_values, 'labels': example_batch['labels']}
-
+        pixel_values = [train_transforms(image.convert("RGB")) for image in example_batch["image"]]
+        return {"pixel_values": pixel_values, "labels": example_batch["labels"]}
 
     def preprocess_val(example_batch):
         """Apply val_transforms across a batch."""
-        pixel_values = [
-            val_transforms(image.convert("RGB")) for image in example_batch["image"]
-        ]
-        return {'pixel_values': pixel_values, 'labels': example_batch['labels']}
+        pixel_values = [val_transforms(image.convert("RGB")) for image in example_batch["image"]]
+        return {"pixel_values": pixel_values, "labels": example_batch["labels"]}
 
     if data_args.max_train_samples is not None:
         dataset["train"] = dataset["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
     # Set the training transforms
     train_dataset = dataset["train"].with_transform(preprocess_train)
     if data_args.max_eval_samples is not None:
-        dataset["validation"] = dataset["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+        dataset["validation"] = (
+            dataset["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+        )
     # Set the validation transforms
     eval_dataset = dataset["validation"].with_transform(preprocess_val)
 
     data_collator = DefaultDataCollator(return_tensors="tf")
 
     train_set = train_dataset.to_tf_dataset(
-        batch_size=training_args.per_device_train_batch_size, # FIXME
+        batch_size=training_args.per_device_train_batch_size,
         columns=["labels", "image"],
         shuffle=True,
         collate_fn=data_collator,
@@ -470,7 +414,7 @@ def main():
 
         # Scheduler and math around the number of training steps.
         # # We need to recalculate our total training steps as the size of the training dataloader may have changed.
-        num_update_steps_per_epoch = len(train_set) #math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+        num_update_steps_per_epoch = len(train_set)
         training_args.max_train_steps = int(training_args.num_train_epochs * num_update_steps_per_epoch)
 
         # Train!
@@ -508,8 +452,7 @@ def main():
 
     if training_args.push_to_hub:
         # You'll probably want to include some of your own metadata here!
-        model.push_to_hub()
-
+        model.push_to_hub(training_args.output_dir)
 
 
 if __name__ == "__main__":
