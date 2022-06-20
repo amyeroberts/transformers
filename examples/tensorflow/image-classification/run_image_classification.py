@@ -1,6 +1,5 @@
-#!/usr/bin/env python
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,114 +11,82 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
+# limitations under the License.
+""" Finetuning any 🤗 Transformers model for image classification."""
 
 import logging
+import json
 import os
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
-import datasets
 import numpy as np
-import torch
+import tensorflow as tf
+from keras import backend
+
+import datasets
 from datasets import load_dataset
-from PIL import Image
-from torchvision.transforms import (
-    CenterCrop,
-    Compose,
-    Normalize,
-    RandomHorizontalFlip,
-    RandomResizedCrop,
-    Resize,
-    ToTensor,
-)
+
+from huggingface_hub import Repository
 
 import transformers
 from transformers import (
-    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
-    AutoModelForImageClassification,
+    TFAutoModelForImageClassification,
+    AutoConfig,
+    DefaultDataCollator,
     HfArgumentParser,
-    Trainer,
-    TrainingArguments,
+    TFTrainingArguments,
+    create_optimizer,
+    set_seed,
+    TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    AutoConfig,
+    DefaultDataCollator,
+    HfArgumentParser,
+    TFTrainingArguments,
+    create_optimizer,
+    set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.keras_callbacks import PushToHubCallback
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.utils import get_full_repo_name, send_example_telemetry
+from transformers.utils.dummy_tf_objects import PushToHubCallback
 from transformers.utils.versions import require_version
+from transformers import DefaultDataCollator
+from transformers.keras_callbacks import PushToHubCallback
 
 
-""" Fine-tuning a 🤗 Transformers model for image classification"""
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output from TF
+import tensorflow as tf  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.20.0.dev0")
-
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
-
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING.keys())
+require_version("datasets>=2.3.2", "To fix: pip install -r examples/tensorflow/image-classification/requirements.txt")
+MODEL_CONFIG_CLASSES = list(TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+MODEL_TYPES = []
 
 
-def pil_loader(path: str):
-    with open(path, "rb") as f:
-        im = Image.open(f)
-        return im.convert("RGB")
+# region Helper classes
+class SavePretrainedCallback(tf.keras.callbacks.Callback):
+    # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
+    # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
+    # that saves the model with this method after each epoch.
+    def __init__(self, output_dir, **kwargs):
+        super().__init__()
+        self.output_dir = output_dir
 
-
-@dataclass
-class DataTrainingArguments:
-    """
-    Arguments pertaining to what data we are going to input our model for training and eval.
-    Using `HfArgumentParser` we can turn this class into argparse arguments to be able to specify
-    them on the command line.
-    """
-
-    dataset_name: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "Name of a dataset from the hub (could be your own, possibly private dataset hosted on the hub)."
-        },
-    )
-    dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
-    )
-    train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."})
-    validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
-    train_val_split: Optional[float] = field(
-        default=0.15, metadata={"help": "Percent to split off of train for validation."}
-    )
-    max_train_samples: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": (
-                "For debugging purposes or quicker training, truncate the number of training examples to this "
-                "value if set."
-            )
-        },
-    )
-    max_eval_samples: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": (
-                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-                "value if set."
-            )
-        },
-    )
-
-    def __post_init__(self):
-        if self.dataset_name is None and (self.train_dir is None and self.validation_dir is None):
-            raise ValueError(
-                "You must specify either a dataset name from the hub or a train and/or validation directory."
-            )
+    def on_epoch_end(self, epoch, logs=None):
+        self.model.save_pretrained(self.output_dir)
 
 
 @dataclass
 class ModelArguments:
     """
-    Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
+    Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
 
     model_name_or_path: str = field(
@@ -156,18 +123,75 @@ class ModelArguments:
     )
 
 
-def collate_fn(examples):
-    pixel_values = torch.stack([example["pixel_values"] for example in examples])
-    labels = torch.tensor([example["labels"] for example in examples])
-    return {"pixel_values": pixel_values, "labels": labels}
+@dataclass
+class DataTrainingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+    """
+
+    dataset_name: Optional[str] = field(
+        default="cifar10", metadata={"help": "The name of the dataset to use (via the datasets library)."}
+    )
+    dataset_config_name: Optional[str] = field(
+        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."}) #FIXME - dir or file?
+    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+    validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."}) #FIXME - dir or file?
+    validation_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+    )
+    overwrite_cache: bool = field(
+        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
+    train_val_split: Optional[float] = field(
+        default=0.15,
+        metadata={"help": "Percent to split off of train for validation"}
+    )
+    block_size: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Optional input sequence length after tokenization. "
+                "The training dataset will be truncated in block of this size for training. "
+                "Default to the model max input length for single sentence inputs (take into account special tokens)."
+            )
+        },
+    )
+    preprocessing_num_workers: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
+    )
+    line_by_line: bool = field(
+        default=False,
+        metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
+    )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
+        },
+    )
+    max_eval_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
+        },
+    )
+    keep_linebreaks: bool = field(
+        default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
+    )
 
 
 def main():
-    # See all possible arguments in src/transformers/training_args.py
-    # or by passing the --help flag to this script.
-    # We now keep distinct sets of args, for a cleaner separation of concerns.
-
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -176,8 +200,8 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_image_classification", model_args, data_args)
+    # information sent is the one passed as arguments along with your Python/Tensorflow versions.
+    send_example_telemetry("run_image_classification", model_args, data_args, framework="tensorflow")
 
     # Setup logging
     logging.basicConfig(
@@ -186,18 +210,16 @@ def main():
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
-    log_level = training_args.get_process_log_level()
-    logger.setLevel(log_level)
-    transformers.utils.logging.set_verbosity(log_level)
-    transformers.utils.logging.enable_default_handler()
-    transformers.utils.logging.enable_explicit_format()
-
-    # Log on each process the small summary:
-    logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
-    )
+    # Set the verbosity to info of the Transformers logger (on main process only):
+    if is_main_process(training_args.local_rank):
+        transformers.utils.logging.set_verbosity(training_args.get_process_log_level())
+        transformers.utils.logging.set_verbosity_info()
+        transformers.utils.logging.enable_default_handler()
+        transformers.utils.logging.enable_explicit_format()
     logger.info(f"Training/evaluation parameters {training_args}")
+
+    output_dir = Path(training_args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -213,8 +235,14 @@ def main():
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
+    if last_checkpoint is None:
+        model_path = model_args.model_name_or_path
+    else:
+        model_path = last_checkpoint
 
     # Initialize our dataset and prepare it for the 'image-classification' task.
+    # Get the datasets: you can either provide your own training and evaluation files (see below)
+    # or specify a Dataset from the hub (the dataset will be downloaded automatically from the datasets Hub).
     if data_args.dataset_name is not None:
         dataset = load_dataset(
             data_args.dataset_name,
@@ -235,6 +263,8 @@ def main():
             cache_dir=model_args.cache_dir,
             task="image-classification",
         )
+        # See more about loading custom images at
+        # https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder.
 
     # If we don't have a validation split, split off a percentage of train as validation.
     data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
@@ -254,130 +284,232 @@ def main():
     # Load the accuracy metric from the datasets package
     metric = datasets.load_metric("accuracy")
 
-    # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
-    # predictions and label_ids field) and has to return a dictionary string to float.
-    def compute_metrics(p):
-        """Computes accuracy on a batch of predictions"""
-        return metric.compute(predictions=np.argmax(p.predictions, axis=1), references=p.label_ids)
-
-    config = AutoConfig.from_pretrained(
-        model_args.config_name or model_args.model_name_or_path,
-        num_labels=len(labels),
-        label2id=label2id,
-        id2label=id2label,
-        finetuning_task="image-classification",
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
-    model = AutoModelForImageClassification.from_pretrained(
-        model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        config=config,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-        ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
-    )
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.feature_extractor_name or model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
-
-    # Define torchvision transforms to be applied to each image.
-    normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
-    _train_transforms = Compose(
-        [
-            RandomResizedCrop(feature_extractor.size),
-            RandomHorizontalFlip(),
-            ToTensor(),
-            normalize,
-        ]
-    )
-    _val_transforms = Compose(
-        [
-            Resize(feature_extractor.size),
-            CenterCrop(feature_extractor.size),
-            ToTensor(),
-            normalize,
-        ]
-    )
-
-    def train_transforms(example_batch):
-        """Apply _train_transforms across a batch."""
-        example_batch["pixel_values"] = [
-            _train_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]
-        ]
-        return example_batch
-
-    def val_transforms(example_batch):
-        """Apply _val_transforms across a batch."""
-        example_batch["pixel_values"] = [_val_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]]
-        return example_batch
-
-    if training_args.do_train:
-        if "train" not in dataset:
-            raise ValueError("--do_train requires a train dataset")
-        if data_args.max_train_samples is not None:
-            dataset["train"] = (
-                dataset["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
-            )
-        # Set the training transforms
-        dataset["train"].set_transform(train_transforms)
-
-    if training_args.do_eval:
-        if "validation" not in dataset:
-            raise ValueError("--do_eval requires a validation dataset")
-        if data_args.max_eval_samples is not None:
-            dataset["validation"] = (
-                dataset["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
-            )
-        # Set the validation transforms
-        dataset["validation"].set_transform(val_transforms)
-
-    # Initalize our trainer
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=dataset["train"] if training_args.do_train else None,
-        eval_dataset=dataset["validation"] if training_args.do_eval else None,
-        compute_metrics=compute_metrics,
-        tokenizer=feature_extractor,
-        data_collator=collate_fn,
-    )
-
-    # Training
-    if training_args.do_train:
-        checkpoint = None
-        if training_args.resume_from_checkpoint is not None:
-            checkpoint = training_args.resume_from_checkpoint
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        trainer.save_model()
-        trainer.log_metrics("train", train_result.metrics)
-        trainer.save_metrics("train", train_result.metrics)
-        trainer.save_state()
-
-    # Evaluation
-    if training_args.do_eval:
-        metrics = trainer.evaluate()
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
-
-    # Write model card and (optionally) push to hub
-    kwargs = {
-        "finetuned_from": model_args.model_name_or_path,
-        "tasks": "image-classification",
-        "dataset": data_args.dataset_name,
-        "tags": ["image-classification", "vision"],
-    }
+    # Handle the repository creation
     if training_args.push_to_hub:
-        trainer.push_to_hub(**kwargs)
-    else:
-        trainer.create_model_card(**kwargs)
+        if training_args.hub_model_id is None:
+            repo_name = get_full_repo_name(Path(training_args.output_dir).name, token=training_args.hub_token)
+        else:
+            repo_name = training_args.hub_model_id
+        repo = Repository(training_args.output_dir, clone_from=repo_name)
+
+        with open(os.path.join(training_args.output_dir, ".gitignore"), "w+") as gitignore:
+            if "step_*" not in gitignore:
+                gitignore.write("step_*\n")
+            if "epoch_*" not in gitignore:
+                gitignore.write("epoch_*\n")
+    elif training_args.output_dir is not None:
+        os.makedirs(training_args.output_dir, exist_ok=True)
+
+    # Load model config and feature extractor
+    config = AutoConfig.from_pretrained(
+        model_path,
+        num_labels=len(labels),
+        i2label=id2label,
+        label2id=label2id,
+        finetuning_task="image-classification",
+    )
+    feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.model_name_or_path)
+
+    # Preprocessing the datasets
+    # Define tf.image transforms to be applied to each image.
+    def normalize_img(img, mean, std):
+        mean = tf.constant(mean)
+        std = tf.constant(std)
+        return (img - mean) / tf.maximum(std, backend.epsilon())
+
+    def get_resize_shape(img, size):
+        if isinstance(size, tuple):
+            return size
+        height, width, _ = img.shape
+        target_height = int(size * height / width) if height > width else size
+        target_width = int(size * width / height) if width > height else size
+        return (target_height, target_width)
+
+
+    def get_random_crop_size(img, scale=(0.08, 1.0), ratio=(3/4, 4/3)):
+        height, width, channels = img.shape
+        img_ratio = width / height
+        crop_log_ratio = np.random.uniform(*np.log(ratio), size=1)
+        crop_ratio = np.exp(crop_log_ratio)
+        crop_scale = np.random.uniform(*scale, size=1)
+
+        # Make sure the longest side is within the image size
+        if crop_ratio < img_ratio:
+            crop_height = int(height * crop_scale)
+            crop_width = int(crop_height * crop_ratio)
+        else:
+            crop_width = int(width * crop_scale)
+            crop_height = int(crop_width / crop_ratio)
+        return (crop_height, crop_width, channels)
+
+
+    def train_transforms(image):
+        image = tf.keras.utils.img_to_array(image)
+        # Note - this augmentation isn't exactly the same in the PyTorch
+        # examples in:
+        # https://github.com/huggingface/transformers/blob/main/examples/pytorch/image-classification/run_image_classification.py
+        # as there isn't a direct RandomResiedCrop equivalent.
+        # You can define your own custom augmentations
+
+        # Randomly select the crop size based on a possible scale
+        # and ratio range
+        image = tf.image.random_crop(image, size=get_random_crop_size(image))
+        image = tf.image.resize(
+            image,
+            size=(feature_extractor.size, feature_extractor.size),
+            method=tf.image.ResizeMethod.BILINEAR
+        )
+        image = tf.image.random_flip_left_right(image)
+        image /= 255
+        image = normalize_img(
+            image,
+            mean=feature_extractor.image_mean,
+            std=feature_extractor.image_std
+        )
+        # All image models take channels first format: BCHW
+        image = tf.transpose(image, (2, 0, 1))
+        return image
+
+
+    def val_transforms(image):
+        image = tf.keras.utils.img_to_array(image)
+        resize_shape = get_resize_shape(image, feature_extractor.size)
+        image = tf.image.resize(
+            image,
+            size=resize_shape,
+            method=tf.image.ResizeMethod.BILINEAR
+        )
+        image = tf.image.crop_to_bounding_box(
+            image,
+            offset_height=image.shape[0] // 2 - feature_extractor.size // 2,
+            offset_width=image.shape[1] // 2 - feature_extractor.size // 2,
+            target_height=feature_extractor.size,
+            target_width=feature_extractor.size,
+        )
+        image /= 255
+        image = normalize_img(
+            image,
+            mean=feature_extractor.image_mean,
+            std=feature_extractor.image_std
+        )
+        # All image models take channels first format: BCHW
+        image = tf.transpose(image, (2, 0, 1))
+        return image
+
+
+    def preprocess_train(example_batch):
+        """Apply train_transforms across a batch."""
+        pixel_values = [
+            train_transforms(image.convert("RGB")) for image in example_batch["image"]
+        ]
+        return {'pixel_values': pixel_values, 'labels': example_batch['labels']}
+
+
+    def preprocess_val(example_batch):
+        """Apply val_transforms across a batch."""
+        pixel_values = [
+            val_transforms(image.convert("RGB")) for image in example_batch["image"]
+        ]
+        return {'pixel_values': pixel_values, 'labels': example_batch['labels']}
+
+    if data_args.max_train_samples is not None:
+        dataset["train"] = dataset["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+    # Set the training transforms
+    train_dataset = dataset["train"].with_transform(preprocess_train)
+    if data_args.max_eval_samples is not None:
+        dataset["validation"] = dataset["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+    # Set the validation transforms
+    eval_dataset = dataset["validation"].with_transform(preprocess_val)
+
+    data_collator = DefaultDataCollator(return_tensors="tf")
+
+    train_set = train_dataset.to_tf_dataset(
+        batch_size=training_args.per_device_train_batch_size, # FIXME
+        columns=["labels", "image"],
+        shuffle=True,
+        collate_fn=data_collator,
+        prefetch=True,
+    )
+    eval_set = eval_dataset.to_tf_dataset(
+        batch_size=training_args.per_device_train_batch_size,
+        columns=["labels", "image"],
+        shuffle=False,
+        collate_fn=data_collator,
+        prefetch=True,
+    )
+
+    # Load pretrained model and feature extractor
+    with training_args.strategy.scope():
+        # If passed along, set the training seed now.
+        if training_args.seed is not None:
+            set_seed(training_args.seed)
+
+        # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
+        # download model
+        model = TFAutoModelForImageClassification.from_pretrained(
+            model_path,
+            config=config,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
+        )
+        # Optimizer
+        num_replicas = training_args.strategy.num_replicas_in_sync
+        batches_per_epoch = len(train_dataset) // (num_replicas * training_args.per_device_train_batch_size)
+        optimizer, lr_schedule = create_optimizer(
+            init_lr=training_args.learning_rate,
+            num_train_steps=int(training_args.num_train_epochs * batches_per_epoch),
+            num_warmup_steps=training_args.warmup_steps,
+            adam_beta1=training_args.adam_beta1,
+            adam_beta2=training_args.adam_beta2,
+            adam_epsilon=training_args.adam_epsilon,
+            weight_decay_rate=training_args.weight_decay,
+        )
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        model.compile(optimizer=optimizer, loss=loss_fn, metrics=["accuracy"])
+
+        # Scheduler and math around the number of training steps.
+        # # We need to recalculate our total training steps as the size of the training dataloader may have changed.
+        num_update_steps_per_epoch = len(train_set) #math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+        training_args.max_train_steps = int(training_args.num_train_epochs * num_update_steps_per_epoch)
+
+        # Train!
+        logger.info("***** Running training *****")
+        logger.info(f"  Num examples = {len(train_dataset)}")
+        logger.info(f"  Num Epochs = {training_args.num_train_epochs}")
+        logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
+        logger.info(f"  Gradient Accumulation steps = {training_args.gradient_accumulation_steps}")
+        logger.info(f"  Total optimization steps = {training_args.max_train_steps}")
+
+        if train_set is not None:
+            callbacks = []
+            if training_args.push_to_hub:
+                callbacks = [PushToHubCallback(output_dir=training_args.output_dir, tokenizer=feature_extractor)]
+            else:
+                callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
+            history = model.fit(
+                train_set,
+                validation_data=eval_set,
+                epochs=int(training_args.num_train_epochs),
+                callbacks=callbacks,
+            )
+        elif eval_dataset is not None:
+            # If there's a validation dataset but no training set, just evaluate the metrics
+            logger.info("Computing metrics on validation data...")
+            eval_loss, eval_accuracy = model.evaluate(eval_dataset)
+            logger.info(f"Loss: {eval_loss:.5f}, Accuracy: {eval_accuracy * 100:.4f}%")
+
+        logger.warning(f"  Final train loss: {history.history['loss'][-1]:.3f}")
+        logger.warning(f"  Final validation loss: {history.history['val_loss'][-1]:.3f}")
+
+        if training_args.output_dir is not None:
+            model.save_pretrained(training_args.output_dir)
+            feature_extractor.save_pretrained(training_args.output_dir)
+
+    if training_args.push_to_hub:
+        # You'll probably want to include some of your own metadata here!
+        model.push_to_hub()
+
 
 
 if __name__ == "__main__":
