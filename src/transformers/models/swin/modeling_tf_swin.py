@@ -659,7 +659,7 @@ class TFSwinLayer(tf.keras.layers.Layer):
         self.drop_path = (
             TFSwinDropPath(config.drop_path_rate, name="drop_path")
             if config.drop_path_rate > 0.0
-            else tf.identity(name="drop_path")
+            else tf.keras.layers.Activation("linear", name="drop_path")
         )
         self.layernorm_after = tf.keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="layernorm_after"
@@ -1405,7 +1405,7 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
         self.classifier = (
             tf.keras.layers.Dense(config.num_labels, name="classifier")
             if config.num_labels > 0
-            else tf.identity(name="classifier")
+            else tf.keras.layers.Activation("linear", name="classifier")
         )
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
