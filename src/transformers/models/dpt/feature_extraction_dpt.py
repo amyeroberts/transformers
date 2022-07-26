@@ -27,11 +27,53 @@ from ...image_utils import (
     ImageFeatureExtractionMixin,
     ImageInput,
     is_torch_tensor,
+    to_pil_image,
 )
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+def constrain_to_multiple_of(size, min_val=0, max_val=None, ensure_multiple_of=1):
+    y = (np.round(size / ensure_multiple_of) * ensure_multiple_of).astype(int)
+
+    if max_val is not None and y > max_val:
+        y = (np.floor(size / ensure_multiple_of) * ensure_multiple_of).astype(int)
+
+    if y < min_val:
+        y = (np.ceil(size / ensure_multiple_of) * ensure_multiple_of).astype(int)
+
+    return y
+
+
+def update_size(image, size=384, keep_aspect_ratio=False, ensure_multiple_of=1):
+    image = to_pil_image(image)
+    width, height = image.size
+
+    if isinstance(size, list):
+        size = tuple(size)
+
+    if isinstance(size, int) or len(size) == 1:
+        size = (size, size)
+
+    # determine new width and height
+    scale_width = size[0] / width
+    scale_height = size[1] / height
+
+    if keep_aspect_ratio:
+        # scale as least as possbile
+        if abs(1 - scale_width) < abs(1 - scale_height):
+            # fit width
+            scale_height = scale_width
+        else:
+            # fit height
+            scale_width = scale_height
+    else:
+        new_width = constrain_to_multiple_of(scale_width * width, ensure_multiple_of=ensure_multiple_of)
+        new_height = constrain_to_multiple_of(scale_height * height, ensure_multiple_of=ensure_multiple_of)
+
+    return (new_width, new_height)
 
 
 class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -90,45 +132,10 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     def constrain_to_multiple_of(self, size, min_val=0, max_val=None):
-        y = (np.round(size / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
-
-        if max_val is not None and y > max_val:
-            y = (np.floor(size / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
-
-        if y < min_val:
-            y = (np.ceil(size / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
-
-        return y
+        return constrain_to_multiple_of(size, min_val, max_val, ensure_multiple_of=self.ensure_multuple_of)
 
     def update_size(self, image):
-        image = self.to_pil_image(image)
-        width, height = image.size
-
-        size = self.size
-
-        if isinstance(size, list):
-            size = tuple(size)
-
-        if isinstance(size, int) or len(size) == 1:
-            size = (size, size)
-
-        # determine new width and height
-        scale_width = size[0] / width
-        scale_height = size[1] / height
-
-        if self.keep_aspect_ratio:
-            # scale as least as possbile
-            if abs(1 - scale_width) < abs(1 - scale_height):
-                # fit width
-                scale_height = scale_width
-            else:
-                # fit height
-                scale_width = scale_height
-        else:
-            new_width = self.constrain_to_multiple_of(scale_width * width)
-            new_height = self.constrain_to_multiple_of(scale_height * height)
-
-        return (new_width, new_height)
+        return update_size(image, self.size, self.keep_aspect_ratio, self.ensure_multiple_of)
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs

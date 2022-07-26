@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
+from ...image_utils import ImageFeatureExtractionMixin, center_to_corners_format, is_torch_tensor
 from ...utils import TensorType, is_torch_available, logging
 
 
@@ -29,16 +29,6 @@ if is_torch_available():
     from torch import nn
 
 logger = logging.get_logger(__name__)
-
-
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (left, top, right, bottom).
-    """
-    x_center, y_center, width, height = x.unbind(-1)
-    boxes = [(x_center - 0.5 * width), (y_center - 0.5 * height), (x_center + 0.5 * width), (y_center + 0.5 * height)]
-    return torch.stack(boxes, dim=-1)
 
 
 class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):

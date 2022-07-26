@@ -23,7 +23,21 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
+from ...image_utils import (
+    ImageFeatureExtractionMixin,
+    center_to_corners_format,
+    corners_to_center_format,
+    get_output_size_with_fixed_aspect_ratio,
+    id_to_rgb,
+    is_torch_tensor,
+    max_by_axis,
+    normalize,
+    pad_to_largest_in_batch,
+    panoptic_segmentation_masks_to_boxes,
+    resize,
+    rgb_to_id,
+    to_pil_image,
+)
 from ...utils import TensorType, is_torch_available, logging
 
 
@@ -37,87 +51,130 @@ logger = logging.get_logger(__name__)
 ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
 
 
-# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
-def center_to_corners_format(x):
+# Copied from transformers.models.detr.feature_extraction_detr.convert_coco_poly_to_mask
+def convert_coco_poly_to_mask(segmentations, height, width):
+
+    try:
+        from pycocotools import mask as coco_mask
+    except ImportError:
+        raise ImportError("Pycocotools is not installed in your environment.")
+
+    masks = []
+    for polygons in segmentations:
+        rles = coco_mask.frPyObjects(polygons, height, width)
+        mask = coco_mask.decode(rles)
+        if len(mask.shape) < 3:
+            mask = mask[..., None]
+        mask = np.asarray(mask, dtype=np.uint8)
+        mask = np.any(mask, axis=2)
+        masks.append(mask)
+    if masks:
+        masks = np.stack(masks, axis=0)
+    else:
+        masks = np.zeros((0, height, width), dtype=np.uint8)
+
+    return masks
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.prepare_coco_detection
+def prepare_coco_detection(image, target, return_segmentation_masks=False):
     """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
+    Convert the target in COCO format into the format expected by DETR.
     """
-    x_c, y_c, w, h = x.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
-    return torch.stack(b, dim=-1)
+    w, h = image.size
+
+    image_id = target["image_id"]
+    image_id = np.asarray([image_id], dtype=np.int64)
+
+    # get all COCO annotations for the given image
+    anno = target["annotations"]
+
+    anno = [obj for obj in anno if "iscrowd" not in obj or obj["iscrowd"] == 0]
+
+    boxes = [obj["bbox"] for obj in anno]
+    # guard against no boxes via resizing
+    boxes = np.asarray(boxes, dtype=np.float32).reshape(-1, 4)
+    boxes[:, 2:] += boxes[:, :2]
+    boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=w)
+    boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=h)
+
+    classes = [obj["category_id"] for obj in anno]
+    classes = np.asarray(classes, dtype=np.int64)
+
+    if return_segmentation_masks:
+        segmentations = [obj["segmentation"] for obj in anno]
+        masks = convert_coco_poly_to_mask(segmentations, h, w)
+
+    keypoints = None
+    if anno and "keypoints" in anno[0]:
+        keypoints = [obj["keypoints"] for obj in anno]
+        keypoints = np.asarray(keypoints, dtype=np.float32)
+        num_keypoints = keypoints.shape[0]
+        if num_keypoints:
+            keypoints = keypoints.reshape((-1, 3))
+
+    keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
+    boxes = boxes[keep]
+    classes = classes[keep]
+    if return_segmentation_masks:
+        masks = masks[keep]
+    if keypoints is not None:
+        keypoints = keypoints[keep]
+
+    target = {}
+    target["boxes"] = boxes
+    target["class_labels"] = classes
+    if return_segmentation_masks:
+        target["masks"] = masks
+    target["image_id"] = image_id
+    if keypoints is not None:
+        target["keypoints"] = keypoints
+
+    # for conversion to coco api
+    area = np.asarray([obj["area"] for obj in anno], dtype=np.float32)
+    iscrowd = np.asarray([obj["iscrowd"] if "iscrowd" in obj else 0 for obj in anno], dtype=np.int64)
+    target["area"] = area[keep]
+    target["iscrowd"] = iscrowd[keep]
+
+    target["orig_size"] = np.asarray([int(h), int(w)], dtype=np.int64)
+    target["size"] = np.asarray([int(h), int(w)], dtype=np.int64)
+
+    return image, target
 
 
-# Copied from transformers.models.detr.feature_extraction_detr.corners_to_center_format
-def corners_to_center_format(x):
-    """
-    Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of corners format (x_0, y_0, x_1,
-    y_1) to center format (center_x, center_y, width, height).
-    """
-    x_transposed = x.T
-    x0, y0, x1, y1 = x_transposed[0], x_transposed[1], x_transposed[2], x_transposed[3]
-    b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
-    return np.stack(b, axis=-1)
+# Copied from transformers.models.detr.feature_extraction_detr.prepare_coco_panoptic
+def prepare_coco_panoptic(image, target, masks_path, return_masks=True):
+    w, h = image.size
+    ann_info = target.copy()
+    ann_path = pathlib.Path(masks_path) / ann_info["file_name"]
 
+    if "segments_info" in ann_info:
+        masks = np.asarray(Image.open(ann_path), dtype=np.uint32)
+        masks = rgb_to_id(masks)
 
-# Copied from transformers.models.detr.feature_extraction_detr.masks_to_boxes
-def masks_to_boxes(masks):
-    """
-    Compute the bounding boxes around the provided panoptic segmentation masks.
+        ids = np.array([ann["id"] for ann in ann_info["segments_info"]])
+        masks = masks == ids[:, None, None]
+        masks = np.asarray(masks, dtype=np.uint8)
 
-    The masks should be in format [N, H, W] where N is the number of masks, (H, W) are the spatial dimensions.
+        labels = np.asarray([ann["category_id"] for ann in ann_info["segments_info"]], dtype=np.int64)
 
-    Returns a [N, 4] tensor, with the boxes in corner (xyxy) format.
-    """
-    if masks.size == 0:
-        return np.zeros((0, 4))
+    target = {}
+    target["image_id"] = np.asarray(
+        [ann_info["image_id"] if "image_id" in ann_info else ann_info["id"]], dtype=np.int64
+    )
+    if return_masks:
+        target["masks"] = masks
+    target["class_labels"] = labels
 
-    h, w = masks.shape[-2:]
+    target["boxes"] = panoptic_segmentation_masks_to_boxes(masks)
 
-    y = np.arange(0, h, dtype=np.float32)
-    x = np.arange(0, w, dtype=np.float32)
-    # see https://github.com/pytorch/pytorch/issues/50276
-    y, x = np.meshgrid(y, x, indexing="ij")
+    target["size"] = np.asarray([int(h), int(w)], dtype=np.int64)
+    target["orig_size"] = np.asarray([int(h), int(w)], dtype=np.int64)
+    if "segments_info" in ann_info:
+        target["iscrowd"] = np.asarray([ann["iscrowd"] for ann in ann_info["segments_info"]], dtype=np.int64)
+        target["area"] = np.asarray([ann["area"] for ann in ann_info["segments_info"]], dtype=np.float32)
 
-    x_mask = masks * np.expand_dims(x, axis=0)
-    x_max = x_mask.reshape(x_mask.shape[0], -1).max(-1)
-    x = np.ma.array(x_mask, mask=~(np.array(masks, dtype=bool)))
-    x_min = x.filled(fill_value=1e8)
-    x_min = x_min.reshape(x_min.shape[0], -1).min(-1)
-
-    y_mask = masks * np.expand_dims(y, axis=0)
-    y_max = y_mask.reshape(x_mask.shape[0], -1).max(-1)
-    y = np.ma.array(y_mask, mask=~(np.array(masks, dtype=bool)))
-    y_min = y.filled(fill_value=1e8)
-    y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
-
-    return np.stack([x_min, y_min, x_max, y_max], 1)
-
-
-# Copied from transformers.models.detr.feature_extraction_detr.rgb_to_id
-def rgb_to_id(color):
-    if isinstance(color, np.ndarray) and len(color.shape) == 3:
-        if color.dtype == np.uint8:
-            color = color.astype(np.int32)
-        return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
-    return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
-
-
-# Copied from transformers.models.detr.feature_extraction_detr.id_to_rgb
-def id_to_rgb(id_map):
-    if isinstance(id_map, np.ndarray):
-        id_map_copy = id_map.copy()
-        rgb_shape = tuple(list(id_map.shape) + [3])
-        rgb_map = np.zeros(rgb_shape, dtype=np.uint8)
-        for i in range(3):
-            rgb_map[..., i] = id_map_copy % 256
-            id_map_copy //= 256
-        return rgb_map
-    color = []
-    for _ in range(3):
-        color.append(id_map % 256)
-        id_map //= 256
-    return color
+    return image, target
 
 
 class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -190,131 +247,21 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         else:
             raise ValueError(f"Format {self.format} not supported")
 
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.convert_coco_poly_to_mask
     def convert_coco_poly_to_mask(self, segmentations, height, width):
+        return convert_coco_poly_to_mask(segmentations, height, width)
 
-        try:
-            from pycocotools import mask as coco_mask
-        except ImportError:
-            raise ImportError("Pycocotools is not installed in your environment.")
-
-        masks = []
-        for polygons in segmentations:
-            rles = coco_mask.frPyObjects(polygons, height, width)
-            mask = coco_mask.decode(rles)
-            if len(mask.shape) < 3:
-                mask = mask[..., None]
-            mask = np.asarray(mask, dtype=np.uint8)
-            mask = np.any(mask, axis=2)
-            masks.append(mask)
-        if masks:
-            masks = np.stack(masks, axis=0)
-        else:
-            masks = np.zeros((0, height, width), dtype=np.uint8)
-
-        return masks
-
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.prepare_coco_detection
     def prepare_coco_detection(self, image, target, return_segmentation_masks=False):
         """
         Convert the target in COCO format into the format expected by DETR.
         """
-        w, h = image.size
+        return prepare_coco_detection(image, target, return_segmentation_masks=False)
 
-        image_id = target["image_id"]
-        image_id = np.asarray([image_id], dtype=np.int64)
-
-        # get all COCO annotations for the given image
-        anno = target["annotations"]
-
-        anno = [obj for obj in anno if "iscrowd" not in obj or obj["iscrowd"] == 0]
-
-        boxes = [obj["bbox"] for obj in anno]
-        # guard against no boxes via resizing
-        boxes = np.asarray(boxes, dtype=np.float32).reshape(-1, 4)
-        boxes[:, 2:] += boxes[:, :2]
-        boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=w)
-        boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=h)
-
-        classes = [obj["category_id"] for obj in anno]
-        classes = np.asarray(classes, dtype=np.int64)
-
-        if return_segmentation_masks:
-            segmentations = [obj["segmentation"] for obj in anno]
-            masks = self.convert_coco_poly_to_mask(segmentations, h, w)
-
-        keypoints = None
-        if anno and "keypoints" in anno[0]:
-            keypoints = [obj["keypoints"] for obj in anno]
-            keypoints = np.asarray(keypoints, dtype=np.float32)
-            num_keypoints = keypoints.shape[0]
-            if num_keypoints:
-                keypoints = keypoints.reshape((-1, 3))
-
-        keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
-        boxes = boxes[keep]
-        classes = classes[keep]
-        if return_segmentation_masks:
-            masks = masks[keep]
-        if keypoints is not None:
-            keypoints = keypoints[keep]
-
-        target = {}
-        target["boxes"] = boxes
-        target["class_labels"] = classes
-        if return_segmentation_masks:
-            target["masks"] = masks
-        target["image_id"] = image_id
-        if keypoints is not None:
-            target["keypoints"] = keypoints
-
-        # for conversion to coco api
-        area = np.asarray([obj["area"] for obj in anno], dtype=np.float32)
-        iscrowd = np.asarray([obj["iscrowd"] if "iscrowd" in obj else 0 for obj in anno], dtype=np.int64)
-        target["area"] = area[keep]
-        target["iscrowd"] = iscrowd[keep]
-
-        target["orig_size"] = np.asarray([int(h), int(w)], dtype=np.int64)
-        target["size"] = np.asarray([int(h), int(w)], dtype=np.int64)
-
-        return image, target
-
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.prepare_coco_panoptic
     def prepare_coco_panoptic(self, image, target, masks_path, return_masks=True):
-        w, h = image.size
-        ann_info = target.copy()
-        ann_path = pathlib.Path(masks_path) / ann_info["file_name"]
+        return prepare_coco_panoptic(image, target, masks_path, return_masks=True)
 
-        if "segments_info" in ann_info:
-            masks = np.asarray(Image.open(ann_path), dtype=np.uint32)
-            masks = rgb_to_id(masks)
-
-            ids = np.array([ann["id"] for ann in ann_info["segments_info"]])
-            masks = masks == ids[:, None, None]
-            masks = np.asarray(masks, dtype=np.uint8)
-
-            labels = np.asarray([ann["category_id"] for ann in ann_info["segments_info"]], dtype=np.int64)
-
-        target = {}
-        target["image_id"] = np.asarray(
-            [ann_info["image_id"] if "image_id" in ann_info else ann_info["id"]], dtype=np.int64
-        )
-        if return_masks:
-            target["masks"] = masks
-        target["class_labels"] = labels
-
-        target["boxes"] = masks_to_boxes(masks)
-
-        target["size"] = np.asarray([int(h), int(w)], dtype=np.int64)
-        target["orig_size"] = np.asarray([int(h), int(w)], dtype=np.int64)
-        if "segments_info" in ann_info:
-            target["iscrowd"] = np.asarray([ann["iscrowd"] for ann in ann_info["segments_info"]], dtype=np.int64)
-            target["area"] = np.asarray([ann["area"] for ann in ann_info["segments_info"]], dtype=np.float32)
-
-        return image, target
-
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._resize
-    def _resize(self, image, size, target=None, max_size=None):
+    @staticmethod
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.resize
+    def resize(image, size, target=None, max_size=None):
         """
         Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller
         edge of the image will be matched to this number.
@@ -322,27 +269,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         If given, also resize the target accordingly.
         """
         if not isinstance(image, Image.Image):
-            image = self.to_pil_image(image)
-
-        def get_size_with_aspect_ratio(image_size, size, max_size=None):
-            w, h = image_size
-            if max_size is not None:
-                min_original_size = float(min((w, h)))
-                max_original_size = float(max((w, h)))
-                if max_original_size / min_original_size * size > max_size:
-                    size = int(round(max_size * min_original_size / max_original_size))
-
-            if (w <= h and w == size) or (h <= w and h == size):
-                return (h, w)
-
-            if w < h:
-                ow = size
-                oh = int(size * h / w)
-            else:
-                oh = size
-                ow = int(size * w / h)
-
-            return (oh, ow)
+            image = to_pil_image(image)
 
         def get_size(image_size, size, max_size=None):
             if isinstance(size, (list, tuple)):
@@ -350,10 +277,10 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             else:
                 # size returned must be (w, h) since we use PIL to resize images
                 # so we revert the tuple
-                return get_size_with_aspect_ratio(image_size, size, max_size)[::-1]
+                return get_output_size_with_fixed_aspect_ratio(image_size, size, max_size)[::-1]
 
         size = get_size(image.size, size, max_size)
-        rescaled_image = self.resize(image, size=size)
+        rescaled_image = resize(image, size=size)
 
         if target is None:
             return rescaled_image, None
@@ -384,15 +311,16 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
 
         return rescaled_image, target
 
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._normalize
-    def _normalize(self, image, mean, std, target=None):
+    @staticmethod
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.normalize
+    def normalize(image, mean, std, target=None):
         """
         Normalize the image with a certain mean and std.
 
         If given, also normalize the target bounding boxes based on the size of the image.
         """
 
-        image = self.normalize(image, mean=mean, std=std)
+        image = normalize(image, mean=mean, std=std)
         if target is None:
             return image, None
 
@@ -559,7 +487,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         if self.do_resize and self.size is not None:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
-                    image, target = self._resize(image=image, target=target, size=self.size, max_size=self.max_size)
+                    image, target = self.resize(image=image, target=target, size=self.size, max_size=self.max_size)
                     images[idx] = image
                     annotations[idx] = target
             else:
@@ -569,19 +497,17 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         if self.do_normalize:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
-                    image, target = self._normalize(
+                    image, target = self.normalize(
                         image=image, mean=self.image_mean, std=self.image_std, target=target
                     )
                     images[idx] = image
                     annotations[idx] = target
             else:
-                images = [
-                    self._normalize(image=image, mean=self.image_mean, std=self.image_std)[0] for image in images
-                ]
+                images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std)[0] for image in images]
 
         if padding:
             # pad images up to largest image in batch
-            max_size = self._max_by_axis([list(image.shape) for image in images])
+            max_size = max_by_axis([list(image.shape) for image in images])
             c, h, w = max_size
             padded_images = []
             for image in images:
@@ -614,15 +540,6 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
 
         return encoded_inputs
 
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._max_by_axis
-    def _max_by_axis(self, the_list):
-        # type: (List[List[int]]) -> List[int]
-        maxes = the_list[0]
-        for sublist in the_list[1:]:
-            for index, item in enumerate(sublist):
-                maxes[index] = max(maxes[index], item)
-        return maxes
-
     def pad(self, pixel_values_list: List["torch.Tensor"], return_tensors: Optional[Union[str, TensorType]] = None):
         """
         Pad images up to the largest image in a batch.
@@ -640,15 +557,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             - **pixel_values** -- Pixel values to be fed to a model.
 
         """
-
-        max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
-        c, h, w = max_size
-        padded_images = []
-        for image in pixel_values_list:
-            # create padded image
-            padded_image = np.zeros((c, h, w), dtype=np.float32)
-            padded_image[: image.shape[0], : image.shape[1], : image.shape[2]] = np.copy(image)
-            padded_images.append(padded_image)
+        padded_images = pad_to_largest_in_batch(pixel_values_list)
 
         # return as BatchFeature
         data = {"pixel_values": padded_images}

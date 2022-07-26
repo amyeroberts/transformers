@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import List, Union
+from typing import Iterable, List, Tuple, Union
 
 import numpy as np
 import PIL.Image
@@ -24,6 +24,10 @@ import requests
 
 from .utils import is_torch_available
 from .utils.generic import _is_torch
+
+
+if is_torch_available():
+    import torch
 
 
 IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
@@ -81,6 +85,20 @@ def _ensure_format_supported(image):
         )
 
 
+def max_by_axis(li: List[List[int]]) -> List[int]:
+    """
+    Returns the maximum value of each column in a list of lists.
+
+    Args:
+        li (`List[List[int]]`):
+            The list of lists to get the maximum value of each column.
+
+    Returns:
+        `List[int]`: The maximum value of each column.
+    """
+    return [max(col) for col in zip(*li)]
+
+
 def to_pil_image(image, rescale=None):
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
@@ -90,8 +108,8 @@ def to_pil_image(image, rescale=None):
         image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor`):
             The image to convert to the PIL Image format.
         rescale (`bool`, *optional*):
-            Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will
-            default to `True` if the image type is a floating type, `False` otherwise.
+            Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will default
+            to `True` if the image type is a floating type, `False` otherwise.
     """
     _ensure_format_supported(image)
 
@@ -129,15 +147,14 @@ def convert_rgb(image):
 
 def to_numpy_array(image, rescale=None, channel_first=True):
     """
-    Converts `image` to a numpy array. Optionally rescales it and puts the channel dimension as the first
-    dimension.
+    Converts `image` to a numpy array. Optionally rescales it and puts the channel dimension as the first dimension.
 
     Args:
         image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
             The image to convert to a NumPy array.
         rescale (`bool`, *optional*):
-            Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Will
-            default to `True` if the image is a PIL Image or an array/tensor of integers, `False` otherwise.
+            Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Will default to
+            `True` if the image is a PIL Image or an array/tensor of integers, `False` otherwise.
         channel_first (`bool`, *optional*, defaults to `True`):
             Whether or not to permute the dimensions of the image to put the channel dimension first.
     """
@@ -184,8 +201,8 @@ def expand_dims(image):
 
 def normalize(image, mean, std):
     """
-    Normalizes `image` with `mean` and `std`. Note that this will trigger a conversion of `image` to a NumPy array
-    if it's a PIL Image.
+    Normalizes `image` with `mean` and `std`. Note that this will trigger a conversion of `image` to a NumPy array if
+    it's a PIL Image.
 
     Args:
         image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
@@ -227,24 +244,24 @@ def resize(image, size, resample=PIL.Image.BILINEAR, default_to_square=True, max
         image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
             The image to resize.
         size (`int` or `Tuple[int, int]`):
-            The size to use for resizing the image. If `size` is a sequence like (h, w), output size will be
-            matched to this.
+            The size to use for resizing the image. If `size` is a sequence like (h, w), output size will be matched to
+            this.
 
             If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
-            `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to
-            this number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
+            `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to this
+            number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
             The filter to user for resampling.
         default_to_square (`bool`, *optional*, defaults to `True`):
-            How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a
-            square (`size`,`size`). If set to `False`, will replicate
+            How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a square
+            (`size`,`size`). If set to `False`, will replicate
             [`torchvision.transforms.Resize`](https://pytorch.org/vision/stable/transforms.html#torchvision.transforms.Resize)
             with support for resizing only the smallest edge and providing an optional `max_size`.
         max_size (`int`, *optional*, defaults to `None`):
-            The maximum allowed for the longer edge of the resized image: if the longer edge of the image is
-            greater than `max_size` after being resized according to `size`, then the image is resized again so
-            that the longer edge is equal to `max_size`. As a result, `size` might be overruled, i.e the smaller
-            edge may be shorter than `size`. Only used if `default_to_square` is `False`.
+            The maximum allowed for the longer edge of the resized image: if the longer edge of the image is greater
+            than `max_size` after being resized according to `size`, then the image is resized again so that the longer
+            edge is equal to `max_size`. As a result, `size` might be overruled, i.e the smaller edge may be shorter
+            than `size`. Only used if `default_to_square` is `False`.
 
     Returns:
         image: A resized `PIL.Image.Image`.
@@ -287,8 +304,8 @@ def resize(image, size, resample=PIL.Image.BILINEAR, default_to_square=True, max
 
 def center_crop(image, size):
     """
-    Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to the
-    size given, it will be padded (so the returned result has the size asked).
+    Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to the size
+    given, it will be padded (so the returned result has the size asked).
 
     Args:
         image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape (n_channels, height, width) or (height, width, n_channels)):
@@ -297,8 +314,8 @@ def center_crop(image, size):
             The size to which crop the image.
 
     Returns:
-        new_image: A center cropped `PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape: (n_channels,
-        height, width).
+        new_image: A center cropped `PIL.Image.Image` or `np.ndarray` or `torch.Tensor` of shape: (n_channels, height,
+        width).
     """
     _ensure_format_supported(image)
 
@@ -368,8 +385,8 @@ def flip_channel_order(image):
 
     Args:
         image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
-            The image whose color channels to flip. If `np.ndarray` or `torch.Tensor`, the channel dimension should
-            be first.
+            The image whose color channels to flip. If `np.ndarray` or `torch.Tensor`, the channel dimension should be
+            first.
     """
     _ensure_format_supported(image)
 
@@ -377,6 +394,177 @@ def flip_channel_order(image):
         image = to_numpy_array(image)
 
     return image[::-1, :, :]
+
+
+# 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
+def center_to_corners_format(x):
+    """
+    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
+    (x_0, y_0, x_1, y_1).
+    """
+    x_center, y_center, width, height = x.unbind(-1)
+    boxes = [(x_center - 0.5 * width), (y_center - 0.5 * height), (x_center + 0.5 * width), (y_center + 0.5 * height)]
+    return torch.stack(boxes, dim=-1)
+
+
+def corners_to_center_format(x):
+    """
+    Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of corners format (x_0, y_0, x_1,
+    y_1) to center format (center_x, center_y, width, height).
+    """
+    x_transposed = x.T
+    x0, y0, x1, y1 = x_transposed[0], x_transposed[1], x_transposed[2], x_transposed[3]
+    b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
+    return np.stack(b, axis=-1)
+
+
+# 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
+# Copyright (c) 2018, Alexander Kirillov
+# All rights reserved.
+def rgb_to_id(color):
+    if isinstance(color, np.ndarray) and len(color.shape) == 3:
+        if color.dtype == np.uint8:
+            color = color.astype(np.int32)
+        return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
+    return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
+
+
+def id_to_rgb(id_map):
+    if isinstance(id_map, np.ndarray):
+        id_map_copy = id_map.copy()
+        rgb_shape = tuple(list(id_map.shape) + [3])
+        rgb_map = np.zeros(rgb_shape, dtype=np.uint8)
+        for i in range(3):
+            rgb_map[..., i] = id_map_copy % 256
+            id_map_copy //= 256
+        return rgb_map
+    color = []
+    for _ in range(3):
+        color.append(id_map % 256)
+        id_map //= 256
+    return color
+
+
+def panoptic_segmentation_masks_to_boxes(masks):
+    """
+    Compute the bounding boxes around the provided panoptic segmentation masks.
+
+    The masks should be in format [N, H, W] where N is the number of masks, (H, W) are the spatial dimensions.
+
+    Returns a [N, 4] tensor, with the boxes in corner (xyxy) format.
+    """
+    if masks.size == 0:
+        return np.zeros((0, 4))
+
+    h, w = masks.shape[-2:]
+
+    y = np.arange(0, h, dtype=np.float32)
+    x = np.arange(0, w, dtype=np.float32)
+    # see https://github.com/pytorch/pytorch/issues/50276
+    y, x = np.meshgrid(y, x, indexing="ij")
+
+    x_mask = masks * np.expand_dims(x, axis=0)
+    x_max = x_mask.reshape(x_mask.shape[0], -1).max(-1)
+    x = np.ma.array(x_mask, mask=~(np.array(masks, dtype=bool)))
+    x_min = x.filled(fill_value=1e8)
+    x_min = x_min.reshape(x_min.shape[0], -1).min(-1)
+
+    y_mask = masks * np.expand_dims(y, axis=0)
+    y_max = y_mask.reshape(x_mask.shape[0], -1).max(-1)
+    y = np.ma.array(y_mask, mask=~(np.array(masks, dtype=bool)))
+    y_min = y.filled(fill_value=1e8)
+    y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
+
+    return np.stack([x_min, y_min, x_max, y_max], 1)
+
+
+def pad_to_largest_in_batch(pixel_values_list: List["torch.Tensor"]) -> List[np.ndarray]:
+    """
+    Pad images up to the largest image in a batch.
+
+    Args:
+        pixel_values_list (`List[torch.Tensor]`):
+            List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
+            objects.
+
+    Returns:
+        [`BatchFeature`]: A [`BatchFeature`] with the following field:
+
+        - **pixel_values** -- Pixel values to be fed to a model.
+
+    """
+
+    max_size = max_by_axis([list(image.shape) for image in pixel_values_list])
+    c, h, w = max_size
+    padded_images = []
+    for image in pixel_values_list:
+        # create padded image
+        padded_image = np.zeros((c, h, w), dtype=np.float32)
+        padded_image[: image.shape[0], : image.shape[1], : image.shape[2]] = np.copy(image)
+        padded_images.append(padded_image)
+
+    return padded_images
+
+
+def get_output_size_with_fixed_aspect_ratio(image_size: Iterable[int], size: int, max_size=None) -> Tuple[int, int]:
+    """
+    Compute the output size of an image given the desired size whilst maintaining the aspect ratio. The smallest edge
+    of the image will be matched to size. # FIXME ME - this isn't quite right.
+
+    Args:
+        image_size (`Tuple[int, int]`): Size of the image.
+        size (`int`): Desired output size. Maximum size of one of the image dimensions.
+    """
+    width, height = image_size
+    if max_size is not None:
+        min_original_size = float(min((width, height)))
+        max_original_size = float(max((width, height)))
+        if max_original_size / min_original_size * size > max_size:
+            size = int(round(max_size * min_original_size / max_original_size))
+
+    if (width <= height and width == size) or (height <= width and height == size):
+        return (height, width)
+
+    if width < height:
+        output_width = size
+        output_height = int(size * height / width)
+    else:
+        output_height = size
+        output_width = int(size * width / height)
+
+    return (output_height, output_width)
+
+
+def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
+    """
+    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
+    `labels`.
+
+    Args:
+        masks (`torch.Tensor`):
+            A tensor of shape `(num_queries, height, width)`.
+        scores (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        labels (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        object_mask_threshold (`float`):
+            A number between 0 and 1 used to binarize the masks.
+
+    Raises:
+        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
+
+    Returns:
+        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
+        < `object_mask_threshold`.
+    """
+    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
+        raise ValueError("mask, scores and labels must have the same shape!")
+
+    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
+
+    return masks[to_keep], scores[to_keep], labels[to_keep]
 
 
 # In the future we can add a TF implementation here when we have TF models.

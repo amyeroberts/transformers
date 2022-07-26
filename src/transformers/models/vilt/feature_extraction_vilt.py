@@ -26,6 +26,9 @@ from ...image_utils import (
     ImageFeatureExtractionMixin,
     ImageInput,
     is_torch_tensor,
+    max_by_axis,
+    resize,
+    to_pil_image,
 )
 from ...utils import TensorType, is_torch_available, logging
 
@@ -87,7 +90,8 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
-    def _resize(self, image, shorter=800, longer=1333, size_divisor=32, resample=Image.BICUBIC):
+    @staticmethod
+    def resize(image, shorter=800, longer=1333, size_divisor=32, resample=Image.BICUBIC):
         """
         Resizes the shorter edge of `image` to `shorter` and limits the longer edge to under `longer`, while preserving
         the aspect ratio. Also makes sure that both the height and width can be divided by `size_divisor`.
@@ -108,7 +112,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 An optional resampling filter.
         """
         if not isinstance(image, Image.Image):
-            image = self.to_pil_image(image)
+            image = to_pil_image(image)
 
         w, h = image.size
         min_size = shorter
@@ -127,15 +131,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         newh, neww = int(newh + 0.5), int(neww + 0.5)
         newh, neww = newh // size_divisor * size_divisor, neww // size_divisor * size_divisor
 
-        return self.resize(image, size=(neww, newh), resample=resample)
-
-    def _max_by_axis(self, the_list):
-        # type: (List[List[int]]) -> List[int]
-        maxes = the_list[0]
-        for sublist in the_list[1:]:
-            for index, item in enumerate(sublist):
-                maxes[index] = max(maxes[index], item)
-        return maxes
+        return resize(image, size=(neww, newh), resample=resample)
 
     def pad_and_create_pixel_mask(
         self, pixel_values_list: List["torch.Tensor"], return_tensors: Optional[Union[str, TensorType]] = None
@@ -158,7 +154,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
               *"pixel_mask"* is in `self.model_input_names`).
         """
 
-        max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
+        max_size = max_by_axis([list(image.shape) for image in pixel_values_list])
         c, h, w = max_size
         padded_images = []
         pixel_mask = []
@@ -267,7 +263,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         if pad_and_return_pixel_mask:
             # pad images up to largest image in batch and create pixel_mask
-            max_size = self._max_by_axis([list(image.shape) for image in images])
+            max_size = max_by_axis([list(image.shape) for image in images])
             c, h, w = max_size
             padded_images = []
             pixel_mask = []

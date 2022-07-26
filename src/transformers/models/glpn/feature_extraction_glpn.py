@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
+from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor, resize, to_pil_image
 from ...utils import TensorType, logging
 
 
@@ -56,14 +56,15 @@ class GLPNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.resample = resample
         self.do_rescale = do_rescale
 
-    def _resize(self, image, size_divisor, resample):
+    @staticmethod
+    def resize(image, size_divisor, resample):
         if not isinstance(image, Image.Image):
-            image = self.to_pil_image(image)
+            image = to_pil_image(image)
 
         width, height = image.size
         new_h, new_w = height // size_divisor * size_divisor, width // size_divisor * size_divisor
 
-        image = self.resize(image, size=(new_w, new_h), resample=resample)
+        image = resize(image, size=(new_w, new_h), resample=resample)
 
         return image
 
@@ -127,7 +128,7 @@ class GLPNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         # transformations (resizing + rescaling)
         if self.do_resize and self.size_divisor is not None:
             images = [
-                self._resize(image=image, size_divisor=self.size_divisor, resample=self.resample) for image in images
+                self.resize(image=image, size_divisor=self.size_divisor, resample=self.resample) for image in images
             ]
         if self.do_rescale:
             images = [self.to_numpy_array(image=image) for image in images]

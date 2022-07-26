@@ -20,7 +20,16 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
+from ...image_utils import (
+    ImageFeatureExtractionMixin,
+    ImageInput,
+    get_output_size_with_fixed_aspect_ratio,
+    is_torch_tensor,
+    max_by_axis,
+    remove_low_and_no_objects,
+    resize,
+    to_pil_image,
+)
 from ...utils import TensorType, is_torch_available, logging
 
 
@@ -33,6 +42,70 @@ if is_torch_available():
         from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
 
 logger = logging.get_logger(__name__)
+
+
+def resize_with_size_divisibility(
+    image, size, target=None, max_size=None, size_divisibility=32, resample=Image.BILINEAR
+):
+    """
+    Resize the image to the given size. Size can be min_size (scalar) or (width, height) tuple. If size is an int,
+    smaller edge of the image will be matched to this number.
+
+    If given, also resize the target accordingly.
+    """
+    if not isinstance(image, Image.Image):
+        image = to_pil_image(image)
+
+    def get_size(image_size, size, max_size=None):
+        if isinstance(size, (list, tuple)):
+            return size
+        else:
+            # size returned must be (width, height) since we use PIL to resize images
+            # so we revert the tuple
+            return get_output_size_with_fixed_aspect_ratio(image_size, size, max_size)[::-1]
+
+    width, height = get_size(image.size, size, max_size)
+
+    if size_divisibility > 0:
+        height = int(np.ceil(height / size_divisibility)) * size_divisibility
+        width = int(np.ceil(width / size_divisibility)) * size_divisibility
+
+    size = (width, height)
+    image = resize(image, size=size, resample=resample)
+
+    if target is not None:
+        target = resize(target, size=size, resample=Image.NEAREST)
+
+    return image, target
+
+
+def convert_segmentation_map_to_binary_masks(
+    segmentation_map: "np.ndarray",
+    instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+    reduce_labels: bool = False,
+    ignore_index: Optional[int] = None,
+):
+    if reduce_labels:
+        if ignore_index is None:
+            raise ValueError("`ignore_index` must be set when `reduce_labels` is `True`.")
+        segmentation_map[segmentation_map == 0] = ignore_index
+        # instances ids start from 1!
+        segmentation_map -= 1
+        segmentation_map[segmentation_map == ignore_index - 1] = ignore_index
+
+    if instance_id_to_semantic_id is not None:
+        # segmentation_map will be treated as an instance segmentation map where each pixel is a instance id
+        # thus it has to be converted to a semantic segmentation map
+        for instance_id, label_id in instance_id_to_semantic_id.items():
+            segmentation_map[segmentation_map == instance_id] = label_id
+    # get all the labels in the image
+    labels = np.unique(segmentation_map)
+    # remove ignore index (if we have one)
+    if ignore_index is not None:
+        labels = labels[labels != ignore_index]
+    # helping broadcast by making mask [1,W,H] and labels [C, 1, 1]
+    binary_masks = segmentation_map[None] == labels[:, None, None]
+    return binary_masks.astype(np.float32), labels.astype(np.int64)
 
 
 class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -112,50 +185,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         If given, also resize the target accordingly.
         """
-        if not isinstance(image, Image.Image):
-            image = self.to_pil_image(image)
-
-        def get_size_with_aspect_ratio(image_size, size, max_size=None):
-            width, height = image_size
-            if max_size is not None:
-                min_original_size = float(min((width, height)))
-                max_original_size = float(max((width, height)))
-                if max_original_size / min_original_size * size > max_size:
-                    size = int(round(max_size * min_original_size / max_original_size))
-
-            if (width <= height and width == size) or (height <= width and height == size):
-                return (height, width)
-
-            if width < height:
-                output_width = size
-                output_height = int(size * height / width)
-            else:
-                output_height = size
-                output_width = int(size * width / height)
-
-            return (output_height, output_width)
-
-        def get_size(image_size, size, max_size=None):
-            if isinstance(size, (list, tuple)):
-                return size
-            else:
-                # size returned must be (width, height) since we use PIL to resize images
-                # so we revert the tuple
-                return get_size_with_aspect_ratio(image_size, size, max_size)[::-1]
-
-        width, height = get_size(image.size, size, max_size)
-
-        if self.size_divisibility > 0:
-            height = int(np.ceil(height / self.size_divisibility)) * self.size_divisibility
-            width = int(np.ceil(width / self.size_divisibility)) * self.size_divisibility
-
-        size = (width, height)
-        image = self.resize(image, size=size, resample=self.resample)
-
-        if target is not None:
-            target = self.resize(target, size=size, resample=Image.NEAREST)
-
-        return image, target
+        return resize_with_size_divisibility(
+            image, size, target, max_size, size_divisibility=self.size_divisibility, resample=self.resample
+        )
 
     def __call__(
         self,
@@ -273,14 +305,20 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             if segmentation_maps is not None:
                 for idx, (image, target) in enumerate(zip(images, segmentation_maps)):
                     image, target = self._resize_with_size_divisibility(
-                        image=image, target=target, size=self.size, max_size=self.max_size
+                        image=image,
+                        target=target,
+                        size=self.size,
+                        max_size=self.max_size,
                     )
                     images[idx] = image
                     segmentation_maps[idx] = target
             else:
                 for idx, image in enumerate(images):
                     images[idx] = self._resize_with_size_divisibility(
-                        image=image, target=None, size=self.size, max_size=self.max_size
+                        image=image,
+                        target=None,
+                        size=self.size,
+                        max_size=self.max_size,
                     )[0]
 
         if self.do_normalize:
@@ -307,39 +345,17 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         return encoded_inputs
 
-    def _max_by_axis(self, the_list: List[List[int]]) -> List[int]:
-        maxes = the_list[0]
-        for sublist in the_list[1:]:
-            for index, item in enumerate(sublist):
-                maxes[index] = max(maxes[index], item)
-        return maxes
-
     def convert_segmentation_map_to_binary_masks(
         self,
         segmentation_map: "np.ndarray",
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ):
-        if self.reduce_labels:
-            if self.ignore_index is None:
-                raise ValueError("`ignore_index` must be set when `reduce_labels` is `True`.")
-            segmentation_map[segmentation_map == 0] = self.ignore_index
-            # instances ids start from 1!
-            segmentation_map -= 1
-            segmentation_map[segmentation_map == self.ignore_index - 1] = self.ignore_index
-
-        if instance_id_to_semantic_id is not None:
-            # segmentation_map will be treated as an instance segmentation map where each pixel is a instance id
-            # thus it has to be converted to a semantic segmentation map
-            for instance_id, label_id in instance_id_to_semantic_id.items():
-                segmentation_map[segmentation_map == instance_id] = label_id
-        # get all the labels in the image
-        labels = np.unique(segmentation_map)
-        # remove ignore index (if we have one)
-        if self.ignore_index is not None:
-            labels = labels[labels != self.ignore_index]
-        # helping broadcast by making mask [1,W,H] and labels [C, 1, 1]
-        binary_masks = segmentation_map[None] == labels[:, None, None]
-        return binary_masks.astype(np.float32), labels.astype(np.int64)
+        return convert_segmentation_map_to_binary_masks(
+            segmentation_map=segmentation_map,
+            instance_id_to_semantic_id=instance_id_to_semantic_id,
+            reduce_labels=self.reduce_labels,
+            ignore_index=self.ignore_index,
+        )
 
     def encode_inputs(
         self,
@@ -396,7 +412,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
               `mask_labels[i][j]` if `class_labels[i][j]`.
         """
 
-        max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
+        max_size = max_by_axis([list(image.shape) for image in pixel_values_list])
 
         annotations = None
         if segmentation_maps is not None:
@@ -517,12 +533,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the
             region < `object_mask_threshold`.
         """
-        if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
-            raise ValueError("mask, scores and labels must have the same shape!")
-
-        to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
-
-        return masks[to_keep], scores[to_keep], labels[to_keep]
+        return remove_low_and_no_objects(
+            masks=masks,
+            scores=scores,
+            labels=labels,
+            object_mask_threshold=object_mask_threshold,
+            num_labels=num_labels,
+        )
 
     def post_process_semantic_segmentation(
         self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Tuple[int, int] = None
