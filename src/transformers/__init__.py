@@ -2902,8 +2902,8 @@ if TYPE_CHECKING:
         PROCESSOR_MAPPING,
         TOKENIZER_MAPPING,
         AutoConfig,
-        AutoImageProcessor,
         AutoFeatureExtractor,
+        AutoImageProcessor,
         AutoProcessor,
         AutoTokenizer,
     )
@@ -3353,7 +3353,7 @@ if TYPE_CHECKING:
         from .models.detr import DetrFeatureExtractor
         from .models.dpt import DPTFeatureExtractor
         from .models.flava import FlavaFeatureExtractor, FlavaProcessor
-        from .models.glpn import GLPNImageProcessor, GLPNFeatureExtractor
+        from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor

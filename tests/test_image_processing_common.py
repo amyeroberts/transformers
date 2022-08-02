@@ -44,7 +44,7 @@ if is_vision_available():
 SAMPLE_IMAGE_PROCESSING_CONFIG_DIR = get_tests_dir("fixtures")
 
 
-class FeatureExtractionSavingTestMixin:
+class ImageProcessingSavingTestMixin:
     def test_image_process_to_json_string(self):
         image_process = self.image_processing_class(**self.image_process_dict)
         obj = json.loads(image_process.to_json_string())
@@ -156,10 +156,10 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
             # This has added the proper auto_map field to the config
             self.assertDictEqual(
                 image_processor.auto_map,
-                {"AutoImageProcessor": "custom_feature_extraction.CustomImageProcessor"},
+                {"AutoImageProcessor": "custom_image_processing.CustomImageProcessor"},
             )
             # The code has been copied from fixtures
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_image_processing.py")))
 
             repo.push_to_hub()
 
