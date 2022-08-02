@@ -128,6 +128,7 @@ _import_structure = {
         "PROCESSOR_MAPPING",
         "TOKENIZER_MAPPING",
         "AutoConfig",
+        "AutoImageProcessor",
         "AutoFeatureExtractor",
         "AutoProcessor",
         "AutoTokenizer",
@@ -643,7 +644,7 @@ else:
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.dpt"].append("DPTFeatureExtractor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor"])
-    _import_structure["models.glpn"].append("GLPNFeatureExtractor")
+    _import_structure["models.glpn"].extend(["GLPNImageProcessor", "GLPNFeatureExtractor"])
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv3"].append("LayoutLMv3FeatureExtractor")
@@ -2901,6 +2902,7 @@ if TYPE_CHECKING:
         PROCESSOR_MAPPING,
         TOKENIZER_MAPPING,
         AutoConfig,
+        AutoImageProcessor,
         AutoFeatureExtractor,
         AutoProcessor,
         AutoTokenizer,
@@ -3351,7 +3353,7 @@ if TYPE_CHECKING:
         from .models.detr import DetrFeatureExtractor
         from .models.dpt import DPTFeatureExtractor
         from .models.flava import FlavaFeatureExtractor, FlavaProcessor
-        from .models.glpn import GLPNFeatureExtractor
+        from .models.glpn import GLPNImageProcessor, GLPNFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
