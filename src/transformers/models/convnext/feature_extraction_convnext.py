@@ -103,13 +103,15 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
-                If set, will return tensors of a particular framework. Acceptable values are:
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `None`):
+                If set, will return a tensor of a particular framework.
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
+                Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` object.
+                - `'pt'`: Return PyTorch `torch.Tensor` object.
+                - `'np'`: Return NumPy `np.ndarray` object.
+                - `'jax'`: Return JAX `jnp.ndarray` object.
+                - None: Return list of `np.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -157,8 +159,13 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
                 ]
                 images = [self.center_crop(image=image, size=self.size) for image in images]
 
+        # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
+        images = [self.to_numpy_array(image, rescale=False, channel_first=True) for image in images]
+
         if self.do_normalize:
-            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
+            # normlize used to get PIL images if do_resize=True. normalize would then rescale the images in the
+            # to_numpy_array call. We now need to force rescaling on the numpy images.
+            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True) for image in images]
 
         # return as BatchFeature
         data = {"pixel_values": images}

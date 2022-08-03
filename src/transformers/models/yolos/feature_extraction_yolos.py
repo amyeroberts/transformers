@@ -385,14 +385,14 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         return rescaled_image, target
 
     # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._normalize
-    def _normalize(self, image, mean, std, target=None):
+    def _normalize(self, image, mean, std, target=None, rescale=False):
         """
         Normalize the image with a certain mean and std.
 
         If given, also normalize the target bounding boxes based on the size of the image.
         """
 
-        image = self.normalize(image, mean=mean, std=std)
+        image = self.normalize(image, mean=mean, std=std, rescale=rescale)
         if target is None:
             return image, None
 
@@ -456,9 +456,15 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             padding (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch.
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
-                objects.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `None`):
+                If set, will return a tensor of a particular framework.
+
+                Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+                - None: Return list of `np.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -566,17 +572,24 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
                 for idx, image in enumerate(images):
                     images[idx] = self._resize(image=image, target=None, size=self.size, max_size=self.max_size)[0]
 
+        # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
+        images = [self.to_numpy_array(image, rescale=False, channel_first=True) for image in images]
+
         if self.do_normalize:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
+                    # normlize used to get PIL images if do_resize=True. normalize would then rescale the images in the
+                    # to_numpy_array call. We now need to force rescaling on the numpy images.
                     image, target = self._normalize(
-                        image=image, mean=self.image_mean, std=self.image_std, target=target
+                        image=image, mean=self.image_mean, std=self.image_std, target=target, rescale=True
                     )
                     images[idx] = image
                     annotations[idx] = target
             else:
+                # normlize used to get PIL images if do_resize=True. normalize would then rescale the images in the
+                # to_numpy_array call. We now need to force rescaling on the numpy images.
                 images = [
-                    self._normalize(image=image, mean=self.image_mean, std=self.image_std)[0] for image in images
+                    self._normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True)[0] for image in images
                 ]
 
         if padding:
