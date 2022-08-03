@@ -63,20 +63,6 @@ Load a feature extractor with [`AutoFeatureExtractor.from_pretrained`]:
 ... )
 ```
 
-## AutoImageProcessor
-
-For vision tasks, an image processor processes the image into the correct input format.
-
-Load an image processor with [`AutoImageProcessor.from_pretrained`]:
-
-```py
->>> from transformers import AutoImageProcessor
-
->>> image_processor = AutoImageProcessor.from_pretrained(
-...     "amyeroberts/test_glpn_image_processor"
-... )
-```
-
 ## AutoProcessor
 
 Multimodal tasks require a processor that combines two types of preprocessing tools. For example, the [LayoutLMV2](model_doc/layoutlmv2) model requires a feature extractor to handle images and a tokenizer to handle text; a processor combines both of them.
