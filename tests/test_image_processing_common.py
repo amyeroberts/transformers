@@ -25,20 +25,11 @@ from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import AutoImageProcessor, GLPNImageProcessor
 from transformers.testing_utils import TOKEN, USER, check_json_file_has_correct_format, get_tests_dir, is_staging_test
-from transformers.utils import is_torch_available, is_vision_available
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
 from test_module.custom_image_processing import CustomImageProcessor  # noqa E402
-
-
-if is_torch_available():
-    import numpy as np
-    import torch
-
-if is_vision_available():
-    from PIL import Image
 
 
 SAMPLE_IMAGE_PROCESSING_CONFIG_DIR = get_tests_dir("fixtures")

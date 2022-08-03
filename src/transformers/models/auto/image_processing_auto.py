@@ -35,7 +35,11 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict([])
+IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
+    [
+        ("glpn", "GLPNFeatureExtractor"),
+    ]
+)
 
 IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
 
@@ -83,8 +87,8 @@ def get_image_processor_config(
             This can be either:
 
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
-              huggingface.co. Valid model ids can be located at the root-level, like `glpn-nyu`, or namespaced
-              under a user or organization name, like `vinvino02/glpn-nyu`.
+              huggingface.co. Valid model ids can be located at the root-level, like `glpn-nyu`, or namespaced under a
+              user or organization name, like `vinvino02/glpn-nyu`.
             - a path to a *directory* containing a configuration file saved using the
               [`~ImageProcessorMixin.save_pretrained`] method, e.g., `./my_model_directory/`.
 
@@ -185,8 +189,8 @@ class AutoImageProcessor:
                 This can be either:
 
                 - a string, the *model id* of a pretrained image_processor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `glpn-nyu`, or
-                  namespaced under a user or organization name, like `vinvino02/glpn-nyu`.
+                  huggingface.co. Valid model ids can be located at the root-level, like `glpn-nyu`, or namespaced
+                  under a user or organization name, like `vinvino02/glpn-nyu`.
                 - a path to a *directory* containing a image processor file saved using the
                   [`~image_processing_utils.ImageProcessorMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
@@ -196,8 +200,8 @@ class AutoImageProcessor:
                 Path to a directory in which a downloaded pretrained model image processor should be cached if the
                 standard cache should not be used.
             force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the image processor files and override the cached versions
-                if they exist.
+                Whether or not to force to (re-)download the image processor files and override the cached versions if
+                they exist.
             resume_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
                 exists.
