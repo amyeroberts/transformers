@@ -20,11 +20,15 @@ import tempfile
 import unittest
 import unittest.mock as mock
 from pathlib import Path
+from typing import Optional
 
 from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import AutoImageProcessor, GLPNImageProcessor
 from transformers.testing_utils import TOKEN, USER, check_json_file_has_correct_format, get_tests_dir, is_staging_test
+from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils.generic import ExplicitEnum
+from transformers.utils.import_utils import is_flax_available, is_tf_available
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -32,7 +36,75 @@ sys.path.append(str(Path(__file__).parent.parent / "utils"))
 from test_module.custom_image_processing import CustomImageProcessor  # noqa E402
 
 
+if is_torch_available():
+    import numpy as np
+    import torch
+
+if is_tf_available():
+    import tensorflow as tf
+
+if is_flax_available():
+    import jax.numpy as jnp
+
+if is_vision_available():
+    from PIL import Image
+
+
 SAMPLE_IMAGE_PROCESSING_CONFIG_DIR = get_tests_dir("fixtures")
+
+
+class ImageType(ExplicitEnum):
+    PIL = "pil"
+    NUMPY = "np"
+    TORCH = "pt"
+    TF = "tf"
+    JAX = "jax"
+
+
+def prepare_image_inputs(
+    batch_size: int,
+    min_resolution: int,
+    max_resolution: int,
+    num_channels: int,
+    size_divisor: Optional[int] = None,
+    same_resolution_across_batch: bool = False,
+    return_tensors: ImageType = ImageType.NUMPY,
+):
+    """
+    Prepare a list of images for testing in the format specified by return_tensors
+    """
+    return_tensors = ImageType(return_tensors)
+
+    if same_resolution_across_batch:
+        min_resolution = max_resolution
+    else:
+
+        # If size_divisor is defined, the image needs to have width/size >= size_divisor
+        min_resolution = max(min_resolution, size_divisor) if size_divisor is not None else min_resolution
+
+    image_inputs = []
+    for _ in range(batch_size):
+        height, width = np.random.choice(np.arange(min_resolution, max_resolution + 1), 2)
+        image = np.random.randint(255, size=(num_channels, height, width)).astype(np.uint8)
+        image_inputs.append(image)
+
+    if return_tensors == ImageType.NUMPY:
+        return image_inputs
+
+    if return_tensors == ImageType.PIL and is_vision_available():
+        # PIL expects the channel dimension as last dimension
+        return [Image.fromarray(img.transpose(1, 2, 0)) for img in image_inputs]
+
+    if return_tensors == ImageType.JAX and is_flax_available():
+        return [jnp.array(img) for img in image_inputs]
+
+    if return_tensors == ImageType.TORCH and is_torch_available():
+        return [torch.from_numpy(img) for img in image_inputs]
+
+    if return_tensors == ImageType.TF and is_tf_available():
+        return [tf.convert_to_tensor(img) for img in image_inputs]
+
+    raise ValueError(f"Unsupported return_tensors: {return_tensors}")
 
 
 class ImageProcessingSavingTestMixin:
