@@ -202,7 +202,8 @@ class ImageFeatureExtractionMixin:
             std (`List[float]` or `np.ndarray` or `torch.Tensor`):
                 The standard deviation (per channel) to use for normalization.
             rescale (`bool`, *optional*, defaults to `False`):
-                Whether or not to rescale the image to be between 0 and 1.
+                Whether or not to rescale the image to be between 0 and 1. If a PIL image is provided, scaling will
+                happen automatically.
         """
         self._ensure_format_supported(image)
 

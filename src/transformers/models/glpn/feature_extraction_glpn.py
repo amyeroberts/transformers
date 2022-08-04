@@ -132,7 +132,7 @@ class GLPNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 self._resize(image=image, size_divisor=self.size_divisor, resample=self.resample) for image in images
             ]
 
-        # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
+        # if do_rescale=False, the casting to a numpy array won't happen, so we need to do it here
         images = [self.to_numpy_array(image, rescale=False, channel_first=True) for image in images]
 
         if self.do_rescale:

@@ -574,23 +574,21 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                     images[idx] = self._resize(image=image, target=None, size=self.size, max_size=self.max_size)[0]
 
         # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
-        images = [self.to_numpy_array(image, rescale=False, channel_first=True) for image in images]
+        make_channel_first = True if isinstance(images[0], Image.Image) else images[0].shape[-1] in (1, 3)
+        images = [self.to_numpy_array(image, rescale=False, channel_first=make_channel_first) for image in images]
 
         if self.do_normalize:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
-                    # normlize used to get PIL images if do_resize=True. normalize would then rescale the images in the
-                    # to_numpy_array call. We now need to force rescaling on the numpy images.
                     image, target = self._normalize(
                         image=image, mean=self.image_mean, std=self.image_std, target=target, rescale=True
                     )
                     images[idx] = image
                     annotations[idx] = target
             else:
-                # normlize used to get PIL images if do_resize=True. normalize would then rescale the images in the
-                # to_numpy_array call. We now need to force rescaling on the numpy images.
                 images = [
-                    self._normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True)[0] for image in images
+                    self._normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True)[0]
+                    for image in images
                 ]
 
         if pad_and_return_pixel_mask:

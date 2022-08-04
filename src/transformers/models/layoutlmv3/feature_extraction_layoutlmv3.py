@@ -241,7 +241,9 @@ class LayoutLMv3FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         if self.do_normalize:
             # normlize used to get PIL images if do_resize=True. normalize would then rescale the images in the
             # to_numpy_array call. We now need to force rescaling on the numpy images.
-            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True) for image in images]
+            images = [
+                self.normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True) for image in images
+            ]
 
         # return as BatchFeature
         data = {"pixel_values": images}

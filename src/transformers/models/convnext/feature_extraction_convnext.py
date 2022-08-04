@@ -160,12 +160,13 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
                 images = [self.center_crop(image=image, size=self.size) for image in images]
 
         # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
-        images = [self.to_numpy_array(image, rescale=False, channel_first=True) for image in images]
+        make_channel_first = True if isinstance(images[0], Image.Image) else images[0].shape[-1] in (1, 3)
+        images = [self.to_numpy_array(image, rescale=False, channel_first=make_channel_first) for image in images]
 
         if self.do_normalize:
-            # normlize used to get PIL images if do_resize=True. normalize would then rescale the images in the
-            # to_numpy_array call. We now need to force rescaling on the numpy images.
-            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True) for image in images]
+            images = [
+                self.normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True) for image in images
+            ]
 
         # return as BatchFeature
         data = {"pixel_values": images}
