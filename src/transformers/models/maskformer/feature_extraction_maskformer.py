@@ -206,9 +206,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 instance id. To convert it to a binary mask of shape (`batch, num_labels, height, width`) we need a
                 dictionary mapping instance ids to label ids to create a semantic segmentation map.
 
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
-                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
-                objects.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `None`):
+                If set, will return a tensor of a particular framework.
+
+                Acceptable values are:
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -283,8 +285,19 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                         image=image, target=None, size=self.size, max_size=self.max_size
                     )[0]
 
+        # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
+        make_channel_first = True if isinstance(images[0], Image.Image) else images[0].shape[-1] in (1, 3)
+        images = [self.to_numpy_array(image, rescale=False, channel_first=make_channel_first) for image in images]
+        if segmentation_maps is not None:
+            segmentation_maps = [
+                self.to_numpy_array(segmap, rescale=False, channel_first=True) for segmap in segmentation_maps
+            ]
+
         if self.do_normalize:
-            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
+            images = [
+                self.normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True) for image in images
+            ]
+
         # NOTE I will be always forced to pad them them since they have to be stacked in the batch dim
         encoded_inputs = self.encode_inputs(
             images,
