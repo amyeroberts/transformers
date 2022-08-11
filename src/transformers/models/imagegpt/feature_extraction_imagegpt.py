@@ -168,7 +168,6 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
             images = [self.normalize(image) for image in images]
 
         # color quantize from (batch_size, height, width, 3) to (batch_size, height, width)
-        # images = np.array(images)
         flattened_images = []
         for image in images:
             image = color_quantize(image, self.clusters).reshape(image.shape[:-1])
