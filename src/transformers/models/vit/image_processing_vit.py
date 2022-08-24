@@ -20,15 +20,16 @@ import numpy as np
 import PIL.Image
 
 from transformers.utils.generic import TensorType
+
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import get_resize_output_image_size, to_channel_dimension_format, normalize, resize, rescale
+from ...image_transforms import get_resize_output_image_size, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
-    ChannelDimension,
-    is_batched,
-    to_numpy_array,
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
+    ChannelDimension,
     ImageInput,
+    is_batched,
+    to_numpy_array,
     valid_images,
 )
 from ...utils import logging
@@ -46,8 +47,8 @@ class ViTImageProcessor(BaseImageProcessor):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the specified
-            scale `rescale_factor`.
+            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
+            specified scale `rescale_factor`.
         do_normalize:
             Set the class default for `do_normalize`. Controls whether to normalize the image.
         size (`int` *optional*, defaults to 224):
@@ -115,7 +116,11 @@ class ViTImageProcessor(BaseImageProcessor):
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def rescale(
-        self, image: np.ndarray, scale: Union[int, float], data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+        self,
+        image: np.ndarray,
+        scale: Union[int, float],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
