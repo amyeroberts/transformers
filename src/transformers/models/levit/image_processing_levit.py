@@ -52,13 +52,6 @@ class LevitImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the shortest edge of the
             input to int(256/224 *`size`).
-        do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether or not to center crop the input to `size`.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
-            specified scale `rescale_factor`.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input with mean and standard deviation.
         size (`int` or `Tuple(int)`, *optional*, defaults to 224):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
             integer is provided, then shorter side of input will be resized to 'size'.
@@ -66,8 +59,15 @@ class LevitImageProcessor(BaseImageProcessor):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
             if `do_resize` is set to `True`.
+        do_center_crop (`bool`, *optional*, defaults to `True`):
+            Whether or not to center crop the input to `size`.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
+            specified scale `rescale_factor`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether or not to normalize the input with mean and standard deviation.
         image_mean (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of means for each channel, to be used when normalizing images.
         image_std (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
@@ -79,24 +79,24 @@ class LevitImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        do_center_crop: bool = True,
-        do_rescale: bool = True,
-        do_normalize: bool = True,
         size: int = 224,
         resample: PIL.Image.Resampling = PIL.Image.Resampling.BICUBIC,
+        do_center_crop: bool = True,
+        do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
         image_mean: Optional[Union[float, Iterable[float]]] = IMAGENET_DEFAULT_MEAN,
         image_std: Optional[Union[float, Iterable[float]]] = IMAGENET_DEFAULT_STD,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
         self.do_resize = do_resize
-        self.do_center_crop = do_center_crop
-        self.do_rescale = do_rescale
-        self.do_normalize = do_normalize
         self.size = size
         self.resample = resample
+        self.do_center_crop = do_center_crop
+        self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
+        self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
@@ -104,7 +104,7 @@ class LevitImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Union[int, Iterable[int]],
-        resample: PIL.Image.Resampling = PIL.Image.BILINEAR,
+        resample: PIL.Image.Resampling = PIL.Image.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
@@ -120,7 +120,7 @@ class LevitImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`int` or `Iterable[int]`):
                 Size of the output image.
-            resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.BILINEAR`):
+            resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.BICUBIC`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -203,8 +203,8 @@ class LevitImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
         do_center_crop: Optional[bool] = None,
-        size=None,
-        resample=None,
+        size: Optional[Union[int, Iterable[int]]] = None,
+        resample: PIL.Image.Resampling = None,
         rescale_factor: Optional[float] = None,
         image_mean: Optional[Union[float, Iterable[float]]] = None,
         image_std: Optional[Union[float, Iterable[float]]] = None,
