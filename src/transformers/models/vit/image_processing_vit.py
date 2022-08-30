@@ -46,17 +46,17 @@ class ViTImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
-            specified scale `rescale_factor`.
-        do_normalize:
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
         size (`int` *optional*, defaults to 224):
             Set the class default for the `size` parameter. Size of the image.
         resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
+            specified scale `rescale_factor`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+        do_normalize:
+            Set the class default for `do_normalize`. Controls whether to normalize the image.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Set the class default for `image_mean`. This is a float or list of floats of length of the number of
             channels for
@@ -162,11 +162,11 @@ class ViTImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: bool = None,
-        do_rescale: bool = None,
-        do_normalize: bool = None,
-        resample: PIL.Image.Resampling = None,
         size: int = None,
+        resample: PIL.Image.Resampling = None,
+        do_rescale: bool = None,
         rescale_factor: float = None,
+        do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -180,15 +180,17 @@ class ViTImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
+            size (`int`, *optional*, defaults to `self.size`):
+                Size of the output image.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PIL.Image.Resampling`,
                 Only has an effect if `do_resize` is set to `True`.
-            size (`int`, *optional*, defaults to `self.size`):
-                Size of the image.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
