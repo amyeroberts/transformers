@@ -48,6 +48,7 @@ ImageInput = Union[
 class ChannelDimension(ExplicitEnum):
     FIRST = "channels_first"
     LAST = "channels_last"
+    NONE = "no_channel_dimension"
 
 
 def is_torch_tensor(obj):
@@ -96,8 +97,12 @@ def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
             The image to infer the channel dimension of.
 
     Returns:
-        The channel dimension of the image.
+        The channel dimension of the image. If the image has no channel dimension, `None` is returned.
     """
+    # The image has no channel dimension
+    if image.ndim == 2:
+        return ChannelDimension.NONE
+
     if image.ndim == 3:
         first_dim, last_dim = 0, 2
     elif image.ndim == 4:
@@ -124,7 +129,10 @@ def get_channel_dimension_axis(image: np.ndarray) -> int:
         The channel dimension axis of the image.
     """
     channel_dim = infer_channel_dimension_format(image)
-    if channel_dim == ChannelDimension.FIRST:
+
+    if channel_dim == ChannelDimension.NONE:
+        return None
+    elif channel_dim == ChannelDimension.FIRST:
         return image.ndim - 3
     elif channel_dim == ChannelDimension.LAST:
         return image.ndim - 1
@@ -147,7 +155,9 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> T
     if channel_dim is None:
         channel_dim = infer_channel_dimension_format(image)
 
-    if channel_dim == ChannelDimension.FIRST:
+    if channel_dim == ChannelDimension.NONE:
+        return image.shape[0], image.shape[1]
+    elif channel_dim == ChannelDimension.FIRST:
         return image.shape[-2], image.shape[-1]
     elif channel_dim == ChannelDimension.LAST:
         return image.shape[-3], image.shape[-2]

@@ -58,6 +58,7 @@ class ImageTransformsTester(unittest.TestCase):
             ("numpy_float_channels_last", (4, 5, 3), np.float32),
             ("numpy_int_channels_first", (3, 4, 5), np.int32),
             ("numpy_uint_channels_first", (3, 4, 5), np.uint8),
+            ("numpy_uint_channels_first_single_channe ", (1, 4, 5), np.uint8),
         ]
     )
     @require_vision
