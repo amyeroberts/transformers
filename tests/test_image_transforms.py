@@ -129,6 +129,15 @@ class ImageTransformsTester(unittest.TestCase):
         image = to_channel_dimension_format(image, "channels_first")
         self.assertEqual(image.shape, (3, 4, 5))
 
+        # Test that the function adds the channel dimension if it is missing.
+        image = np.random.rand(3, 4)
+        image = to_channel_dimension_format(image, "channels_first")
+        self.assertEqual(image.shape, (3, 4, 1))
+
+        image = np.random.rand(4, 5)
+        image = to_channel_dimension_format(image, "channels_last")
+        self.assertEqual(image.shape, (4, 5, 1))
+
     def test_get_resize_output_image_size(self):
         image = np.random.randint(0, 256, (3, 224, 224))
 

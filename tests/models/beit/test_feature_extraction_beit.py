@@ -50,7 +50,7 @@ class BeitFeatureExtractionTester(unittest.TestCase):
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
-        reduce_labels=False,
+        do_reduce_labels=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -65,7 +65,7 @@ class BeitFeatureExtractionTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.reduce_labels = reduce_labels
+        self.do_reduce_labels = do_reduce_labels
 
     def prepare_feat_extract_dict(self):
         return {
@@ -76,7 +76,7 @@ class BeitFeatureExtractionTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "reduce_labels": self.reduce_labels,
+            "do_reduce_labels": self.do_reduce_labels,
         }
 
 

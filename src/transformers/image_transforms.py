@@ -45,7 +45,8 @@ if TYPE_CHECKING:
 
 def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDimension, str]) -> np.ndarray:
     """
-    Converts `image` to the channel dimension format specified by `channel_dim`.
+    Converts `image` to the channel dimension format specified by `channel_dim`. If the input image doesn't
+    have a channel dimension, the channel dimension will be added.
 
     Args:
         image (`numpy.ndarray`):
@@ -65,9 +66,15 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
         return image
 
     if target_channel_dim == ChannelDimension.FIRST:
-        image = image.transpose((2, 0, 1))
+        if current_channel_dim == ChannelDimension.NONE:
+            image = image[None, :, :]
+        else:
+            image = image.transpose((2, 0, 1))
     elif target_channel_dim == ChannelDimension.LAST:
-        image = image.transpose((1, 2, 0))
+        if current_channel_dim == ChannelDimension.NONE:
+            image = image[:, :, None]
+        else:
+            image = image.transpose((1, 2, 0))
     else:
         raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
 

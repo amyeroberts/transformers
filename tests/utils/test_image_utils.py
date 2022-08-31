@@ -502,6 +502,10 @@ class UtilFunctionTester(unittest.TestCase):
         image = np.random.randint(0, 256, (3, 32, 64))
         self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
 
+        # Test we can get the image size if the image doesn't have a channel dimension.
+        image = np.random.randint(0, 256, (32, 64))
+        self.assertEqual(get_image_size(image), (32, 64))
+
     def test_infer_channel_dimension(self):
         # Test we fail with invalid input
         with pytest.raises(ValueError):
@@ -536,6 +540,11 @@ class UtilFunctionTester(unittest.TestCase):
         inferred_dim = infer_channel_dimension_format(image)
         self.assertEqual(inferred_dim, ChannelDimension.FIRST)
 
+        # If the image has no channel dimension, we return None
+        image = np.random.randint(0, 256, (4, 5))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.NONE)
+
     def test_get_channel_dimension_axis(self):
         # Test we correctly identify the channel dimension
         image = np.random.randint(0, 256, (3, 4, 5))
@@ -558,3 +567,8 @@ class UtilFunctionTester(unittest.TestCase):
         image = np.random.randint(0, 256, (1, 3, 4, 5))
         inferred_axis = get_channel_dimension_axis(image)
         self.assertEqual(inferred_axis, 1)
+
+        # If there is not channel dimension, we return None
+        image = np.random.randint(0, 256, (4, 5))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, ChannelDimension.NONE)
