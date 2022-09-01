@@ -61,16 +61,18 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
 
     current_channel_dim = infer_channel_dimension_format(image)
     target_channel_dim = ChannelDimension(channel_dim)
+
     if current_channel_dim == target_channel_dim:
         return image
 
     if target_channel_dim == ChannelDimension.FIRST:
-        image = image.transpose((2, 0, 1))
+        permutation = (2, 0, 1) if image.ndim == 3 else (0, 3, 1, 2)
     elif target_channel_dim == ChannelDimension.LAST:
-        image = image.transpose((1, 2, 0))
+        permutation = (1, 2, 0) if image.ndim == 3 else (0, 2, 3, 1)
     else:
         raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
 
+    image = image.transpose(permutation)
     return image
 
 
