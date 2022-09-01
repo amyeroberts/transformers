@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    import PIL
 
     from transformers import FlavaFeatureExtractor
     from transformers.models.flava.feature_extraction_flava import (
@@ -54,6 +54,8 @@ class FlavaFeatureExtractionTester(unittest.TestCase):
         do_center_crop=True,
         crop_size=224,
         resample=None,
+        do_rescale=True,
+        rescale_factor=1 / 255,
         do_normalize=True,
         image_mean=FLAVA_IMAGE_MEAN,
         image_std=FLAVA_IMAGE_STD,
@@ -77,10 +79,12 @@ class FlavaFeatureExtractionTester(unittest.TestCase):
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.do_resize = do_resize
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.size = size
-        self.resample = resample if resample is not None else Image.BICUBIC
+        self.resample = resample if resample is not None else PIL.Image.Resampling.BICUBIC
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -96,7 +100,7 @@ class FlavaFeatureExtractionTester(unittest.TestCase):
 
         self.codebook_do_resize = codebook_do_resize
         self.codebook_size = codebook_size
-        self.codebook_resample = codebook_resample if codebook_resample is not None else Image.LANCZOS
+        self.codebook_resample = codebook_resample if codebook_resample is not None else PIL.Image.Resampling.LANCZOS
         self.codebook_do_center_crop = codebook_do_center_crop
         self.codebook_crop_size = codebook_crop_size
         self.codebook_do_map_pixels = codebook_do_map_pixels
@@ -112,6 +116,8 @@ class FlavaFeatureExtractionTester(unittest.TestCase):
             "do_resize": self.do_resize,
             "size": self.size,
             "resample": self.resample,
+            "do_rescale": self.do_rescale,
+            "rescale_factor": self.rescale_factor,
             "do_center_crop": self.do_center_crop,
             "crop_size": self.crop_size,
             "input_size_patches": self.input_size_patches,
@@ -171,6 +177,8 @@ class FlavaFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         self.assertTrue(hasattr(feature_extractor, "resample"))
         self.assertTrue(hasattr(feature_extractor, "crop_size"))
         self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
+        self.assertTrue(hasattr(feature_extractor, "do_rescale"))
+        self.assertTrue(hasattr(feature_extractor, "rescale_factor"))
         self.assertTrue(hasattr(feature_extractor, "masking_generator"))
         self.assertTrue(hasattr(feature_extractor, "codebook_do_resize"))
         self.assertTrue(hasattr(feature_extractor, "codebook_size"))
@@ -191,7 +199,7 @@ class FlavaFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         # create random PIL images
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
         for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
+            self.assertIsInstance(image, PIL.Image.Image)
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt")
@@ -323,7 +331,7 @@ class FlavaFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         # create random PIL images
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
         for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
+            self.assertIsInstance(image, PIL.Image.Image)
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_codebook_pixels=True, return_tensors="pt")
