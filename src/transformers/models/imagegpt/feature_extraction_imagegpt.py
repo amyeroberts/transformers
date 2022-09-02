@@ -117,13 +117,15 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
-                If set, will return tensors of a particular framework. Acceptable values are:
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `None`):
+                If set, will return a tensor of a particular framework.
 
+                Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
+                - None: Return list of `np.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -158,19 +160,25 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         if self.do_resize and self.size is not None:
             images = [self.resize(image, size=self.size, resample=self.resample) for image in images]
 
+        # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
+        make_channel_first = True if isinstance(images[0], Image.Image) else images[0].shape[-1] in (1, 3)
+        images = [self.to_numpy_array(image, rescale=False, channel_first=make_channel_first) for image in images]
+
         if self.do_normalize:
             images = [self.normalize(image) for image in images]
 
         # color quantize from (batch_size, height, width, 3) to (batch_size, height, width)
-        images = np.array(images)
-        images = color_quantize(images, self.clusters).reshape(images.shape[:-1])
+        flattened_images = []
+        for image in images:
+            image = color_quantize(image, self.clusters).reshape(image.shape[:-1])
 
-        # flatten to (batch_size, height*width)
-        batch_size = images.shape[0]
-        images = images.reshape(batch_size, -1)
+            # flatten to (height*width)
+            image = image.reshape(-1)
+
+            flattened_images.append(image)
 
         # return as BatchFeature
-        data = {"input_ids": images}
+        data = {"input_ids": flattened_images}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
