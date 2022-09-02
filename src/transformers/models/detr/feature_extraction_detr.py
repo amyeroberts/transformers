@@ -378,14 +378,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return rescaled_image, target
 
-    def _normalize(self, image, mean, std, target=None):
+    def _normalize(self, image, mean, std, target=None, rescale=False):
         """
         Normalize the image with a certain mean and std.
 
         If given, also normalize the target bounding boxes based on the size of the image.
         """
 
-        image = self.normalize(image, mean=mean, std=std)
+        image = self.normalize(image, mean=mean, std=std, rescale=rescale)
         if target is None:
             return image, None
 
@@ -455,9 +455,15 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
-                objects.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `None`):
+                If set, will return a tensor of a particular framework.
+
+                Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+                - None: Return list of `np.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -567,17 +573,22 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 for idx, image in enumerate(images):
                     images[idx] = self._resize(image=image, target=None, size=self.size, max_size=self.max_size)[0]
 
+        # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
+        make_channel_first = True if isinstance(images[0], Image.Image) else images[0].shape[-1] in (1, 3)
+        images = [self.to_numpy_array(image, rescale=False, channel_first=make_channel_first) for image in images]
+
         if self.do_normalize:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
                     image, target = self._normalize(
-                        image=image, mean=self.image_mean, std=self.image_std, target=target
+                        image=image, mean=self.image_mean, std=self.image_std, target=target, rescale=True
                     )
                     images[idx] = image
                     annotations[idx] = target
             else:
                 images = [
-                    self._normalize(image=image, mean=self.image_mean, std=self.image_std)[0] for image in images
+                    self._normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True)[0]
+                    for image in images
                 ]
 
         if pad_and_return_pixel_mask:
