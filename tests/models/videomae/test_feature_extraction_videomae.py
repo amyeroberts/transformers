@@ -91,6 +91,7 @@ class VideoMAEFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
         self.assertTrue(hasattr(feature_extractor, "image_std"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
+        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
         self.assertTrue(hasattr(feature_extractor, "size"))
 
     def test_batch_feature(self):

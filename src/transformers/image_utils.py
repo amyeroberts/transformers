@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, List, Tuple, Union
 import numpy as np
 
 import requests
+import tree
 
 from .utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 from .utils.constants import (  # noqa: F401
@@ -72,7 +73,8 @@ def is_valid_image(img):
 
 
 def valid_images(imgs):
-    return all(is_valid_image(img) for img in imgs)
+    """Checks whether an image, or any nested structure of images are valid."""
+    return all(tree.flatten(tree.map_structure(lambda img: is_valid_image(img), imgs)))
 
 
 def is_batched(img):
