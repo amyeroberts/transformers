@@ -18,7 +18,6 @@ import unittest
 
 import numpy as np
 
-from parameterized import parameterized
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -402,43 +401,3 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             self.assertEqual(
                 el["segmentation"].shape, (self.feature_extract_tester.height, self.feature_extract_tester.width)
             )
-
-    @require_torch
-    @parameterized.expand(
-        [
-            ("do_resize_True_do_normalize_True", True, True),
-            ("do_resize_True_do_normalize_False", True, False),
-            ("do_resize_True_do_normalize_True", True, True),
-            ("do_resize_True_do_normalize_False", True, False),
-            ("do_resize_False_do_normalize_True", False, True),
-            ("do_resize_False_do_normalize_False", False, False),
-            ("do_resize_False_do_normalize_True", False, True),
-            ("do_resize_False_do_normalize_False", False, False),
-        ]
-    )
-    def test_call_flags(self, _, do_resize, do_normalize):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        feature_extractor.do_resize = do_resize
-        feature_extractor.do_normalize = do_normalize
-        # create random PIL images
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
-
-        all_image_shapes = [img.size[::-1] for img in image_inputs]
-        if do_resize:
-            all_image_shapes = [
-                self.feature_extract_tester.get_expected_values([image], batched=False) for image in image_inputs
-            ]
-
-        max_across_dim = [max(shape) for shape in zip(*all_image_shapes)]
-        expected_shape = (
-            self.feature_extract_tester.batch_size,
-            self.feature_extract_tester.num_channels,
-            *max_across_dim,
-        )
-
-        pixel_values = feature_extractor(image_inputs, return_tensors="pt")["pixel_values"]
-        self.assertEqual(len(pixel_values), self.feature_extract_tester.batch_size)
-
-        self.assertEqual(pixel_values.shape, expected_shape)
-        self.assertIsInstance(pixel_values, torch.Tensor)
