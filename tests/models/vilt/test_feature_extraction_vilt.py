@@ -18,7 +18,6 @@ import unittest
 
 import numpy as np
 
-from parameterized import parameterized
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -250,40 +249,3 @@ class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         self.assertTrue(
             torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
         )
-
-    @parameterized.expand(
-        [
-            ("do_resize_True_do_normalize_True_pad_True", True, True, True),
-            ("do_resize_True_do_normalize_False_pad_True", True, False, True),
-            ("do_resize_False_do_normalize_True_pad_True", False, True, True),
-            ("do_resize_False_do_normalize_False_pad_True", False, False, True),
-            ("do_resize_True_do_normalize_True_pad_False", True, True, False),
-            ("do_resize_True_do_normalize_False_pad_False", True, False, False),
-            ("do_resize_False_do_normalize_True_pad_False", False, True, False),
-            ("do_resize_False_do_normalize_False_pad_False", False, False, False),
-        ]
-    )
-    def test_call_flags(self, _, do_resize, do_normalize, pad):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        feature_extractor.do_resize = do_resize
-        feature_extractor.do_normalize = do_normalize
-        # create random PIL images
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
-
-        expected_shapes = [(3, *x.size[::-1]) for x in image_inputs]
-        if do_resize:
-            expected_shapes = [
-                (3, *self.feature_extract_tester.get_expected_values([img], batched=False)) for img in image_inputs
-            ]
-        if pad:
-            channel, height, width = (max(sizes) for sizes in zip(*expected_shapes))
-            expected_shapes = [(channel, height, width)] * len(image_inputs)
-
-        pixel_values = feature_extractor(image_inputs, pad_and_return_pixel_mask=pad, return_tensors=None)[
-            "pixel_values"
-        ]
-        self.assertEqual(len(pixel_values), self.feature_extract_tester.batch_size)
-        for idx, image in enumerate(pixel_values):
-            self.assertEqual(image.shape, expected_shapes[idx])
-            self.assertIsInstance(image, np.ndarray)
