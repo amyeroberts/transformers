@@ -144,15 +144,13 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `None`):
-                If set, will return a tensor of a particular framework.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
+                If set, will return tensors of a particular framework. Acceptable values are:
 
-                Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` object.
-                - `'pt'`: Return PyTorch `torch.Tensor` object.
-                - `'np'`: Return NumPy `np.ndarray` object.
-                - `'jax'`: Return JAX `jnp.ndarray` object.
-                - None: Return list of `np.ndarray` objects.
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
