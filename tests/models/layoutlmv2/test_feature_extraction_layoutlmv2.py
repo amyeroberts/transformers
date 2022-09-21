@@ -18,7 +18,6 @@ import unittest
 
 import numpy as np
 
-from parameterized import parameterized
 from transformers.testing_utils import require_pytesseract, require_torch
 from transformers.utils import is_pytesseract_available, is_torch_available
 
@@ -220,33 +219,3 @@ class LayoutLMv2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
                 224,
             ),
         )
-
-    @parameterized.expand(
-        [
-            ("do_resize_True", True),
-            ("do_resize_False", False),
-        ]
-    )
-    def test_call_flags(self, _, do_resize):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        feature_extractor.do_resize = do_resize
-        # create random PIL images
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
-
-        expected_shapes = [(3, *x.size[::-1]) for x in image_inputs]
-        if do_resize:
-            expected_shapes = [
-                (
-                    self.feature_extract_tester.num_channels,
-                    self.feature_extract_tester.size,
-                    self.feature_extract_tester.size,
-                )
-                for _ in range(self.feature_extract_tester.batch_size)
-            ]
-
-        pixel_values = feature_extractor(image_inputs, return_tensors=None)["pixel_values"]
-        self.assertEqual(len(pixel_values), self.feature_extract_tester.batch_size)
-        for idx, image in enumerate(pixel_values):
-            self.assertEqual(image.shape, expected_shapes[idx])
-            self.assertIsInstance(image, np.ndarray)
