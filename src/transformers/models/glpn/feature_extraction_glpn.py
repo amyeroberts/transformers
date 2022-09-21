@@ -86,15 +86,13 @@ class GLPNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `None`):
-                If set, will return a tensor of a particular framework.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
+                If set, will return tensors of a particular framework. Acceptable values are:
 
-                Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` object.
-                - `'pt'`: Return PyTorch `torch.Tensor` object.
-                - `'np'`: Return NumPy `np.ndarray` object.
-                - `'jax'`: Return JAX `jnp.ndarray` object.
-                - None: Return list of `np.ndarray` objects.
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -131,13 +129,8 @@ class GLPNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             images = [
                 self._resize(image=image, size_divisor=self.size_divisor, resample=self.resample) for image in images
             ]
-
-        # if do_rescale=False, the casting to a numpy array won't happen, so we need to do it here
-        make_channel_first = True if isinstance(images[0], Image.Image) else images[0].shape[-1] in (1, 3)
-        images = [self.to_numpy_array(image, rescale=False, channel_first=make_channel_first) for image in images]
-
         if self.do_rescale:
-            images = [self.rescale(image=image.astype(np.float32), scale=1 / 255.0) for image in images]
+            images = [self.to_numpy_array(image=image) for image in images]
 
         # return as BatchFeature
         data = {"pixel_values": images}
