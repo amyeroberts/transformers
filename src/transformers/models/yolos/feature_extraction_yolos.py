@@ -392,7 +392,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         If given, also normalize the target bounding boxes based on the size of the image.
         """
 
-        image = self.normalize(image, mean=mean, std=std)
+        image = self.normalize(image, mean=mean, std=std, rescale=rescale)
         if target is None:
             return image, None
 
