@@ -26,6 +26,9 @@ from ...utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, TensorType, lo
 
 logger = logging.get_logger(__name__)
 
+NUMPY_INT_DTYPE = (int, np.int0, np.int8, np.int16, np.int32, np.int64)
+NUMPY_UINT_DTYPE = (np.uint0, np.uint8, np.uint16, np.uint32, np.uint64)
+
 
 class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
@@ -81,10 +84,10 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
     def crop_video(self, video, size):
         return [self.center_crop(frame, size) for frame in video]
 
-    def normalize_video(self, video, mean, std):
+    def normalize_video(self, video, mean, std, rescale=None, channel_first=True):
         # video can be a list of PIL images, list of NumPy arrays or list of PyTorch tensors
         # first: convert to list of NumPy arrays
-        video = [self.to_numpy_array(frame) for frame in video]
+        video = [self.to_numpy_array(frame, rescale=rescale, channel_first=channel_first) for frame in video]
 
         # second: stack to get (num_frames, num_channels, height, width)
         video = np.stack(video, axis=0)
@@ -96,6 +99,9 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
             std = np.array(std).astype(video.dtype)
 
         return (video - mean[None, :, None, None]) / std[None, :, None, None]
+
+    def to_numpy_array_video(self, video, rescale=None, channel_first=True):
+        return [self.to_numpy_array(frame, rescale, channel_first) for frame in video]
 
     def __call__(
         self, videos: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -159,8 +165,23 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
             videos = [self.resize_video(video, size=self.size, resample=self.resample) for video in videos]
         if self.do_center_crop and self.size is not None:
             videos = [self.crop_video(video, size=self.size) for video in videos]
+
+        # cast to numpy array
+        make_channel_first = True if isinstance(videos[0][0], Image.Image) else videos[0][0].shape[-1] in (1, 3)
+        videos = [
+            self.to_numpy_array_video(video, rescale=False, channel_first=make_channel_first) for video in videos
+        ]
+
         if self.do_normalize:
-            videos = [self.normalize_video(video, mean=self.image_mean, std=self.image_std) for video in videos]
+            do_rescale = False
+            if videos[0][0].dtype in (NUMPY_INT_DTYPE + NUMPY_UINT_DTYPE) or (videos[0][0].max() > 1.0):
+                do_rescale = True
+            videos = [
+                self.normalize_video(
+                    video, mean=self.image_mean, std=self.image_std, rescale=do_rescale, channel_first=False
+                )
+                for video in videos
+            ]
 
         # return as BatchFeature
         data = {"pixel_values": videos}

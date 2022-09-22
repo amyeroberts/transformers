@@ -281,8 +281,6 @@ class OPTDecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
 
-        self.activation_dropout = config.activation_dropout
-
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim)
         self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim)
@@ -534,7 +532,9 @@ class OPTDecoder(OPTPreTrainedModel):
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
+                inputs_embeds.device
+            )
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
@@ -637,7 +637,6 @@ class OPTDecoder(OPTPreTrainedModel):
             inputs_embeds = self.project_in(inputs_embeds)
 
         hidden_states = inputs_embeds + pos_embeds
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None

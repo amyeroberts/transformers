@@ -186,7 +186,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -1011,7 +1011,7 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(os.path.join(training_args.output_dir, ckpt_dir), params=params)
             tokenizer.save_pretrained(os.path.join(training_args.output_dir, ckpt_dir))
             if training_args.push_to_hub:
@@ -1064,7 +1064,7 @@ def main():
         if metrics:
             # normalize metrics
             metrics = get_metrics(metrics)
-            metrics = jax.tree_map(jnp.mean, metrics)
+            metrics = jax.tree_util.tree_map(jnp.mean, metrics)
 
         # compute ROUGE metrics
         generations = []
