@@ -355,3 +355,51 @@ def center_crop(
     new_image = new_image[..., max(0, top) : min(new_height, bottom), max(0, left) : min(new_width, right)]
     new_image = to_channel_dimension_format(new_image, output_data_format)
     return new_image
+
+
+# 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
+def center_to_corners_format(bboxes_center: np.ndarray) -> np.ndarray:
+    """
+    Converts bounding boxes from center format (center_x, center_y, width, height) to corners format (x_0, y_1, x_1,
+    y_1).
+    """
+    x_c, y_c, w, h = bboxes_center.T
+    bboxes_corners = np.stack([x_c - 0.5 * w, y_c - 0.5 * h, x_c + 0.5 * w, y_c + 0.5 * h], axis=-1)
+    return bboxes_corners
+
+
+def corners_to_center_format(bboxes_corners):
+    """
+    Converts bounding boxes from corners format (x_0, y_1, x_1, y_1) to center format (center_x, center_y, width,
+    height).
+    """
+    x0, y0, x1, y1 = bboxes_corners.T
+    bboxes_centers = np.stack([(x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0], axis=-1)
+    return bboxes_centers
+
+
+# 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
+# Copyright (c) 2018, Alexander Kirillov
+# All rights reserved.
+def rgb_to_id(color):
+    if isinstance(color, np.ndarray) and len(color.shape) == 3:
+        if color.dtype == np.uint8:
+            color = color.astype(np.int32)
+        return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
+    return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
+
+
+def id_to_rgb(id_map):
+    if isinstance(id_map, np.ndarray):
+        id_map_copy = id_map.copy()
+        rgb_shape = tuple(list(id_map.shape) + [3])
+        rgb_map = np.zeros(rgb_shape, dtype=np.uint8)
+        for i in range(3):
+            rgb_map[..., i] = id_map_copy % 256
+            id_map_copy //= 256
+        return rgb_map
+    color = []
+    for _ in range(3):
+        color.append(id_map % 256)
+        id_map //= 256
+    return color
