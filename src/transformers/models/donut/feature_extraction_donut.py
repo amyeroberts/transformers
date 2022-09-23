@@ -19,6 +19,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 from PIL import Image, ImageOps
 
+from transformers.models.videomae.feature_extraction_videomae import NUMPY_INT_DTYPE
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -198,8 +200,13 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             images = [self.thumbnail(image=image, size=self.size) for image in images]
         if self.do_pad and self.size is not None:
             images = [self.pad(image=image, size=self.size, random_padding=random_padding) for image in images]
+
+        # cast to numpy array
+        make_channel_first = True if isinstance(images[0], Image.Image) else images[0].shape[-1] in (1, 3)
+        images = [self.to_numpy_array(image, rescale=False, channel_first=make_channel_first) for image in images]
+
         if self.do_normalize:
-            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
+            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std, rescale=True) for image in images]
 
         # return as BatchFeature
         data = {"pixel_values": images}
