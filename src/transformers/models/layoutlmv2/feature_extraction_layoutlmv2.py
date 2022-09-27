@@ -21,10 +21,9 @@ from typing import List, Optional, Union
 import numpy as np
 from PIL import Image
 
-from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
-from ...utils import TensorType, is_pytesseract_available, logging, requires_backends
+from ...utils import is_pytesseract_available, logging
 
+from .image_processing_layoutlmv2 import LayoutLMv2ImageProcessor
 
 # soft dependency
 if is_pytesseract_available():
@@ -79,159 +78,161 @@ def apply_tesseract(image: Image.Image, lang: Optional[str], tesseract_config: O
     return words, normalized_boxes
 
 
-class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
-    r"""
-    Constructs a LayoutLMv2 feature extractor. This can be used to resize document images to the same size, as well as
-    to apply OCR on them in order to get a list of words and normalized bounding boxes.
+LayoutLMv2FeatureExtractor = LayoutLMv2ImageProcessor
 
-    This feature extractor inherits from [`~feature_extraction_utils.PreTrainedFeatureExtractor`] which contains most
-    of the main methods. Users should refer to this superclass for more information regarding those methods.
+# class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+#     r"""
+#     Constructs a LayoutLMv2 feature extractor. This can be used to resize document images to the same size, as well as
+#     to apply OCR on them in order to get a list of words and normalized bounding boxes.
 
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input to a certain `size`.
-        size (`int` or `Tuple(int)`, *optional*, defaults to 224):
-            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
-            set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
-            if `do_resize` is set to `True`.
-        apply_ocr (`bool`, *optional*, defaults to `True`):
-            Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
-        ocr_lang (`str`, *optional*):
-            The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
-            used.
-        tesseract_config (`str`, *optional*):
-            Any additional custom configuration flags that are forwarded to the `config` parameter when calling
-            Tesseract. For example: '--psm 6'.
+#     This feature extractor inherits from [`~feature_extraction_utils.PreTrainedFeatureExtractor`] which contains most
+#     of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-            <Tip>
+#     Args:
+#         do_resize (`bool`, *optional*, defaults to `True`):
+#             Whether to resize the input to a certain `size`.
+#         size (`int` or `Tuple(int)`, *optional*, defaults to 224):
+#             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
+#             integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
+#             set to `True`.
+#         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+#             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
+#             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
+#             if `do_resize` is set to `True`.
+#         apply_ocr (`bool`, *optional*, defaults to `True`):
+#             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
+#         ocr_lang (`str`, *optional*):
+#             The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
+#             used.
+#         tesseract_config (`str`, *optional*):
+#             Any additional custom configuration flags that are forwarded to the `config` parameter when calling
+#             Tesseract. For example: '--psm 6'.
 
-            LayoutLMv2FeatureExtractor uses Google's Tesseract OCR engine under the hood.
+#             <Tip>
 
-            </Tip>"""
+#             LayoutLMv2FeatureExtractor uses Google's Tesseract OCR engine under the hood.
 
-    model_input_names = ["pixel_values"]
+#             </Tip>"""
 
-    def __init__(
-        self,
-        do_resize=True,
-        size=224,
-        resample=Image.BILINEAR,
-        apply_ocr=True,
-        ocr_lang=None,
-        tesseract_config="",
-        **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.apply_ocr = apply_ocr
-        self.ocr_lang = ocr_lang
-        self.tesseract_config = tesseract_config
+#     model_input_names = ["pixel_values"]
 
-    def __call__(
-        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
-    ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several image(s).
+#     def __init__(
+#         self,
+#         do_resize=True,
+#         size=224,
+#         resample=Image.BILINEAR,
+#         apply_ocr=True,
+#         ocr_lang=None,
+#         tesseract_config="",
+#         **kwargs
+#     ):
+#         super().__init__(**kwargs)
+#         self.do_resize = do_resize
+#         self.size = size
+#         self.resample = resample
+#         self.apply_ocr = apply_ocr
+#         self.ocr_lang = ocr_lang
+#         self.tesseract_config = tesseract_config
 
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
-                If set, will return tensors of a particular framework. Acceptable values are:
+#     def __call__(
+#         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
+#     ) -> BatchFeature:
+#         """
+#         Main method to prepare for the model one or several image(s).
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
+#         Args:
+#             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+#                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+#                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+#                 number of channels, H and W are image height and width.
+#             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
+#                 If set, will return tensors of a particular framework. Acceptable values are:
 
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+#                 - `'tf'`: Return TensorFlow `tf.constant` objects.
+#                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
+#                 - `'np'`: Return NumPy `np.ndarray` objects.
+#                 - `'jax'`: Return JAX `jnp.ndarray` objects.
 
-            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
-              width).
-            - **words** -- Optional words as identified by Tesseract OCR (only when [`LayoutLMv2FeatureExtractor`] was
-              initialized with `apply_ocr` set to `True`).
-            - **boxes** -- Optional bounding boxes as identified by Tesseract OCR, normalized based on the image size
-              (only when [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to `True`).
+#         Returns:
+#             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-        Examples:
+#             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
+#               width).
+#             - **words** -- Optional words as identified by Tesseract OCR (only when [`LayoutLMv2FeatureExtractor`] was
+#               initialized with `apply_ocr` set to `True`).
+#             - **boxes** -- Optional bounding boxes as identified by Tesseract OCR, normalized based on the image size
+#               (only when [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to `True`).
 
-        ```python
-        >>> from transformers import LayoutLMv2FeatureExtractor
-        >>> from PIL import Image
+#         Examples:
 
-        >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+#         ```python
+#         >>> from transformers import LayoutLMv2FeatureExtractor
+#         >>> from PIL import Image
 
-        >>> # option 1: with apply_ocr=True (default)
-        >>> feature_extractor = LayoutLMv2FeatureExtractor()
-        >>> encoding = feature_extractor(image, return_tensors="pt")
-        >>> print(encoding.keys())
-        >>> # dict_keys(['pixel_values', 'words', 'boxes'])
+#         >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
 
-        >>> # option 2: with apply_ocr=False
-        >>> feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
-        >>> encoding = feature_extractor(image, return_tensors="pt")
-        >>> print(encoding.keys())
-        >>> # dict_keys(['pixel_values'])
-        ```"""
+#         >>> # option 1: with apply_ocr=True (default)
+#         >>> feature_extractor = LayoutLMv2FeatureExtractor()
+#         >>> encoding = feature_extractor(image, return_tensors="pt")
+#         >>> print(encoding.keys())
+#         >>> # dict_keys(['pixel_values', 'words', 'boxes'])
 
-        # Input type checking for clearer error
-        valid_images = False
+#         >>> # option 2: with apply_ocr=False
+#         >>> feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+#         >>> encoding = feature_extractor(image, return_tensors="pt")
+#         >>> print(encoding.keys())
+#         >>> # dict_keys(['pixel_values'])
+#         ```"""
 
-        # Check that images has a valid type
-        if isinstance(images, (Image.Image, np.ndarray)) or is_torch_tensor(images):
-            valid_images = True
-        elif isinstance(images, (list, tuple)):
-            if len(images) == 0 or isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]):
-                valid_images = True
+#         # Input type checking for clearer error
+#         valid_images = False
 
-        if not valid_images:
-            raise ValueError(
-                "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example), "
-                "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples), "
-                f"but is of type {type(images)}."
-            )
+#         # Check that images has a valid type
+#         if isinstance(images, (Image.Image, np.ndarray)) or is_torch_tensor(images):
+#             valid_images = True
+#         elif isinstance(images, (list, tuple)):
+#             if len(images) == 0 or isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]):
+#                 valid_images = True
 
-        is_batched = bool(
-            isinstance(images, (list, tuple))
-            and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
-        )
+#         if not valid_images:
+#             raise ValueError(
+#                 "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example), "
+#                 "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples), "
+#                 f"but is of type {type(images)}."
+#             )
 
-        if not is_batched:
-            images = [images]
+#         is_batched = bool(
+#             isinstance(images, (list, tuple))
+#             and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
+#         )
 
-        # Tesseract OCR to get words + normalized bounding boxes
-        if self.apply_ocr:
-            requires_backends(self, "pytesseract")
-            words_batch = []
-            boxes_batch = []
-            for image in images:
-                words, boxes = apply_tesseract(self.to_pil_image(image), self.ocr_lang, self.tesseract_config)
-                words_batch.append(words)
-                boxes_batch.append(boxes)
+#         if not is_batched:
+#             images = [images]
 
-        # transformations (resizing)
-        if self.do_resize and self.size is not None:
-            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+#         # Tesseract OCR to get words + normalized bounding boxes
+#         if self.apply_ocr:
+#             requires_backends(self, "pytesseract")
+#             words_batch = []
+#             boxes_batch = []
+#             for image in images:
+#                 words, boxes = apply_tesseract(self.to_pil_image(image), self.ocr_lang, self.tesseract_config)
+#                 words_batch.append(words)
+#                 boxes_batch.append(boxes)
 
-        images = [self.to_numpy_array(image, rescale=False) for image in images]
-        # flip color channels from RGB to BGR (as Detectron2 requires this)
-        images = [image[::-1, :, :] for image in images]
+#         # transformations (resizing)
+#         if self.do_resize and self.size is not None:
+#             images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
 
-        # return as BatchFeature
-        data = {"pixel_values": images}
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+#         images = [self.to_numpy_array(image, rescale=False) for image in images]
+#         # flip color channels from RGB to BGR (as Detectron2 requires this)
+#         images = [image[::-1, :, :] for image in images]
 
-        if self.apply_ocr:
-            encoded_inputs["words"] = words_batch
-            encoded_inputs["boxes"] = boxes_batch
+#         # return as BatchFeature
+#         data = {"pixel_values": images}
+#         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
-        return encoded_inputs
+#         if self.apply_ocr:
+#             encoded_inputs["words"] = words_batch
+#             encoded_inputs["boxes"] = boxes_batch
+
+#         return encoded_inputs
