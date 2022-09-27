@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
+from transformers.utils import TensorType
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 
@@ -33,14 +34,12 @@ if is_vision_available():
         is_torch_tensor,
     )
 
-
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
-    if is_tf_available():
-        import tensorflow as tf
-    if is_flax_available():
-        import jax.numpy as jnp
+if is_torch_available():
+    import torch
+if is_tf_available():
+    import tensorflow as tf
+if is_flax_available():
+    import jax.numpy as jnp
 
 
 def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDimension, str]) -> np.ndarray:
@@ -357,15 +356,40 @@ def center_crop(
     return new_image
 
 
+def _center_to_corners_format_torch(bboxes_center: "torch.Tensor") -> "torch.Tensor":
+    x_c, y_c, w, h = bboxes_center.unbind(-1)
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    return torch.stack(b, dim=-1)
+
+
+def _center_to_corners_format_numpy(bboxes_center: "torch.Tensor") -> "torch.Tensor":
+    x_c, y_c, w, h = bboxes_center.T
+    bboxes_corners = np.stack([x_c - 0.5 * w, y_c - 0.5 * h, x_c + 0.5 * w, y_c + 0.5 * h], axis=-1)
+    return bboxes_corners
+
+
+def _center_to_corners_format_tf(bboxes_center: "tf.Tensor") -> "tf.Tensor":
+    x_c, y_c, w, h = tf.unstack(bboxes_center, axis=-1)
+    bboxes_corners = tf.stack([x_c - 0.5 * w, y_c - 0.5 * h, x_c + 0.5 * w, y_c + 0.5 * h], axis=-1)
+    return bboxes_corners
+
+
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
-def center_to_corners_format(bboxes_center: np.ndarray) -> np.ndarray:
+def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
     """
     Converts bounding boxes from center format (center_x, center_y, width, height) to corners format (x_0, y_1, x_1,
     y_1).
     """
-    x_c, y_c, w, h = bboxes_center.T
-    bboxes_corners = np.stack([x_c - 0.5 * w, y_c - 0.5 * h, x_c + 0.5 * w, y_c + 0.5 * h], axis=-1)
-    return bboxes_corners
+    # Function is used during model forward pass, so we use the input framework if possible, without
+    # converting to numpy
+    if is_torch_tensor(bboxes_center):
+        return _center_to_corners_format_torch(bboxes_center)
+    elif isinstance(bboxes_center, np.ndarray):
+        return _center_to_corners_format_numpy(bboxes_center)
+    elif is_tf_tensor(bboxes_center):
+        return _center_to_corners_format_tf(bboxes_center)
+
+    raise ValueError(f"Unsupported input type {type(bboxes_center)}")
 
 
 def corners_to_center_format(bboxes_corners):

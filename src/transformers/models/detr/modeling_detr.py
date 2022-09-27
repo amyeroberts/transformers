@@ -45,7 +45,7 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 if is_vision_available():
-    from .feature_extraction_detr import center_to_corners_format
+    from .image_processing_detr import center_to_corners_format
 
 if is_timm_available():
     from timm import create_model

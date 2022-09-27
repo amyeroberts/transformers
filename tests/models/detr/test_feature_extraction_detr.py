@@ -46,9 +46,12 @@ class DetrFeatureExtractionTester(unittest.TestCase):
         do_resize=True,
         size=18,
         max_size=1333,  # by setting max_size > max_resolution we're effectively not testing this :p
+        do_rescale=True,
+        rescale_factor=1 / 255,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
+        do_pad=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -58,18 +61,24 @@ class DetrFeatureExtractionTester(unittest.TestCase):
         self.do_resize = do_resize
         self.size = size
         self.max_size = max_size
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.do_pad = do_pad
 
     def prepare_feat_extract_dict(self):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
             "max_size": self.max_size,
+            "do_rescale": self.do_rescale,
+            "rescale_factor": self.rescale_factor,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
+            "do_pad": self.do_pad,
         }
 
     def get_expected_values(self, image_inputs, batched=False):
@@ -122,9 +131,12 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
         self.assertTrue(hasattr(feature_extractor, "image_std"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
+        self.assertTrue(hasattr(feature_extractor, "do_rescale"))
+        self.assertTrue(hasattr(feature_extractor, "rescale_factor"))
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
         self.assertTrue(hasattr(feature_extractor, "size"))
         self.assertTrue(hasattr(feature_extractor, "max_size"))
+        self.assertTrue(hasattr(feature_extractor, "do_pad"))
 
     def test_batch_feature(self):
         pass
@@ -230,7 +242,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
     def test_equivalence_pad_and_create_pixel_mask(self):
         # Initialize feature_extractors
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
-        feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False)
+        feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False, do_rescale=False)
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:

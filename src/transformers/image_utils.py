@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import TYPE_CHECKING, List, Tuple, Union, Iterable, Dict
+from typing import TYPE_CHECKING, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 
@@ -155,7 +155,7 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> T
         raise ValueError(f"Unsupported data format: {channel_dim}")
 
 
-def is_valid_annotation_coco_detection(annotation: Dict[str: Union[List, Tuple]]) -> bool:
+def is_valid_annotation_coco_detection(annotation: Dict[str, Union[List, Tuple]]) -> bool:
     if (
         isinstance(annotation, dict)
         and "image_id" in annotation
@@ -171,7 +171,7 @@ def is_valid_annotation_coco_detection(annotation: Dict[str: Union[List, Tuple]]
     return False
 
 
-def is_valid_annotation_coco_panoptic(annotation: Dict[str: Union[List, Tuple]]) -> bool:
+def is_valid_annotation_coco_panoptic(annotation: Dict[str, Union[List, Tuple]]) -> bool:
     if (
         isinstance(annotation, dict)
         and "image_id" in annotation
@@ -188,11 +188,11 @@ def is_valid_annotation_coco_panoptic(annotation: Dict[str: Union[List, Tuple]])
     return False
 
 
-def valid_coco_detection_annotations(annotations: Iterable[Dict[str: Union[List, Tuple]]]) -> bool:
+def valid_coco_detection_annotations(annotations: Iterable[Dict[str, Union[List, Tuple]]]) -> bool:
     return all(is_valid_annotation_coco_detection(ann) for ann in annotations)
 
 
-def valid_coco_panoptic_annotations(annotations: Iterable[Dict[str: Union[List, Tuple]]]) -> bool:
+def valid_coco_panoptic_annotations(annotations: Iterable[Dict[str, Union[List, Tuple]]]) -> bool:
     return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
 
 

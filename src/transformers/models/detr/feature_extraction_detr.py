@@ -25,6 +25,7 @@ from PIL import Image
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import TensorType, is_torch_available, logging
+from .image_processing_detr import DetrImageProcessor
 
 
 if is_torch_available():
@@ -119,7 +120,10 @@ def id_to_rgb(id_map):
     return color
 
 
-class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+DetrFeatureExtractor = DetrImageProcessor
+
+
+class _DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a DETR feature extractor.
 
