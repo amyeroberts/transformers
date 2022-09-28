@@ -357,25 +357,34 @@ def center_crop(
     return new_image
 
 
-# 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
-def center_to_corners_format(bboxes_center: np.ndarray) -> np.ndarray:
-    """
-    Converts bounding boxes from center format (center_x, center_y, width, height) to corners format (x_0, y_1, x_1,
-    y_1).
-    """
+def _center_to_corners_format_numpy(bboxes_center: "torch.Tensor") -> "torch.Tensor":
     x_c, y_c, w, h = bboxes_center.T
     bboxes_corners = np.stack([x_c - 0.5 * w, y_c - 0.5 * h, x_c + 0.5 * w, y_c + 0.5 * h], axis=-1)
     return bboxes_corners
 
 
-def corners_to_center_format(bboxes_corners):
+def _center_to_corners_format_tf(bboxes_center: "tf.Tensor") -> "tf.Tensor":
+    x_c, y_c, w, h = tf.unstack(bboxes_center, axis=-1)
+    bboxes_corners = tf.stack([x_c - 0.5 * w, y_c - 0.5 * h, x_c + 0.5 * w, y_c + 0.5 * h], axis=-1)
+    return bboxes_corners
+
+
+# 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
+def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
     """
-    Converts bounding boxes from corners format (x_0, y_1, x_1, y_1) to center format (center_x, center_y, width,
-    height).
+    Converts bounding boxes from center format (center_x, center_y, width, height) to corners format (x_0, y_1, x_1,
+    y_1).
     """
-    x0, y0, x1, y1 = bboxes_corners.T
-    bboxes_centers = np.stack([(x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0], axis=-1)
-    return bboxes_centers
+    # Function is used during model forward pass, so we use the input framework if possible, without
+    # converting to numpy
+    if is_torch_tensor(bboxes_center):
+        return _center_to_corners_format_torch(bboxes_center)
+    elif isinstance(bboxes_center, np.ndarray):
+        return _center_to_corners_format_numpy(bboxes_center)
+    elif is_tf_tensor(bboxes_center):
+        return _center_to_corners_format_tf(bboxes_center)
+
+    raise ValueError(f"Unsupported input type {type(bboxes_center)}")
 
 
 # 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
