@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
+from transformers.utils.generic import TensorType
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 
