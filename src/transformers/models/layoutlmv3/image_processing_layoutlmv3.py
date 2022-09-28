@@ -12,9 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for LayoutLMv2."""
+"""Image processor class for LayoutLMv3."""
 
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, Optional, Union
 
 import numpy as np
 import PIL.Image
@@ -22,19 +22,25 @@ import PIL.Image
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import get_resize_output_image_size, normalize, rescale, resize, to_channel_dimension_format, to_pil_image
+from ...image_transforms import (
+    get_resize_output_image_size,
+    normalize,
+    rescale,
+    resize,
+    to_channel_dimension_format,
+    to_pil_image,
+)
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    infer_channel_dimension_format,
     is_batched,
     to_numpy_array,
     valid_images,
-    infer_channel_dimension_format
 )
-from ...utils import logging
-from ...utils import TensorType, is_pytesseract_available, logging, requires_backends
+from ...utils import is_pytesseract_available, logging, requires_backends
 
 
 # soft dependency
@@ -100,9 +106,9 @@ def flip_channel_order(image: np.ndarray, data_format: Optional[ChannelDimension
     return image
 
 
-class LayoutLMv2ImageProcessor(BaseImageProcessor):
+class LayoutLMv3ImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a LayoutLMv2 image processor.
+    Constructs a LayoutLMv3 image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -112,6 +118,19 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             Set the class default for the `size` parameter. Size of the image.
         resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image's pixel values
+            by the specified `rescale_value`.
+        rescale_factor (`float`, *optional*, defaults to 1 / 255):
+            Set the class default for the `rescale_value` parameter. Controls the value by which the image's pixel
+            values are rescaled.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Set the class default for the `do_normalize` parameter. Controls whether to normalize the image.
+        image_mean (`Iterable[float]` or `float`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+            Set the class default for the `image_mean` parameter. Mean values to be used for normalization.
+        image_std (`Iterable[float]` or `float`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+            Set the class default for the `image_std` parameter. Standard deviation values to be used for
+            normalization.
         apply_ocr (`bool`, *optional*, defaults to `True`):
             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
         ocr_lang (`str`, *optional*):
@@ -129,15 +148,25 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: int = 224,
         resample: PIL.Image.Resampling = PIL.Image.Resampling.BILINEAR,
+        do_rescale: bool = True,
+        rescale_value: float = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Union[float, Iterable[float]] = None,
+        image_std: Union[float, Iterable[float]] = None,
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,
-        tesseract_config: Optional[str] = None,
+        tesseract_config: Optional[str] = "",
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_value
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.apply_ocr = apply_ocr
         self.ocr_lang = ocr_lang
         self.tesseract_config = tesseract_config
@@ -169,12 +198,60 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         output_size = get_resize_output_image_size(image, size=size)
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
+    def rescale(
+        self,
+        image: np.ndarray,
+        scale: Union[int, float],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs
+    ) -> np.ndarray:
+        """
+        Rescale an image by a scale factor. image = image * scale.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            scale (`int` or `float`):
+                Scale to apply to the image.
+            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+        """
+        return rescale(image, scale=scale, data_format=data_format, **kwargs)
+
+    def normalize(
+        self,
+        image: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs
+    ) -> np.ndarray:
+        """
+        Normalize an image.
+
+        Args:
+            image (`np.ndarray`):
+                Image to normalize.
+            mean (`float` or `Iterable[float]`):
+                Mean values to be used for normalization.
+            std (`float` or `Iterable[float]`):
+                Standard deviation values to be used for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+        """
+        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
+
     def preprocess(
         self,
         images: ImageInput,
         do_resize: bool = None,
         size: int = None,
         resample: PIL.Image.Resampling = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Union[float, Iterable[float]] = None,
+        image_std: Union[float, Iterable[float]] = None,
         apply_ocr: bool = None,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = None,
@@ -194,11 +271,22 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PIL.Image.Resampling`,
                 Only has an effect if `do_resize` is set to `True`.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image pixel values between [0, 1].
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to apply to the image pixel values. Only has an effect if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            image_mean (`float` or `Iterable[float]`, *optional*, defaults to `self.image_mean`):
+                Mean values to be used for normalization. Only has an effect if `do_normalize` is set to `True`.
+            image_std (`float` or `Iterable[float]`, *optional*, defaults to `self.image_std`):
+                Standard deviation values to be used for normalization. Only has an effect if `do_normalize` is set to
+                `True`.
             apply_ocr (`bool`, *optional*, defaults to `self.apply_ocr`):
                 Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
             ocr_lang (`str`, *optional*, defaults to `self.ocr_lang`):
-                The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English
-                is used.
+                The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
+                used.
             tesseract_config (`str`, *optional*, defaults to `self.tesseract_config`):
                 Any additional custom configuration flags that are forwarded to the `config` parameter when calling
                 Tesseract.
@@ -217,6 +305,11 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
         apply_ocr = apply_ocr if apply_ocr is not None else self.apply_ocr
         ocr_lang = ocr_lang if ocr_lang is not None else self.ocr_lang
         tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
@@ -233,9 +326,16 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         if do_resize and size is None:
             raise ValueError("Size must be specified if do_resize is True.")
 
+        if do_rescale and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+
+        if do_normalize and (image_mean is None or image_std is None):
+            raise ValueError("If do_normalize is True, image_mean and image_std must be specified.")
+
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
+        # Tesseract OCR to get words + normalized bounding boxes
         if apply_ocr:
             requires_backends(self, "pytesseract")
             words_batch = []
@@ -248,13 +348,19 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]
 
+        if do_rescale:
+            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+
+        if do_normalize:
+            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+
         # flip color channels from RGB to BGR (as Detectron2 requires this)
         images = [flip_channel_order(image) for image in images]
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
-        data = {"pixel_values": images}
+        data = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
         if apply_ocr:
             data["words"] = words_batch
             data["boxes"] = boxes_batch
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return data

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for LayoutLMv2."""
 
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, Optional, Union
 
 import numpy as np
 import PIL.Image
@@ -22,19 +22,16 @@ import PIL.Image
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import get_resize_output_image_size, normalize, rescale, resize, to_channel_dimension_format, to_pil_image
+from ...image_transforms import get_resize_output_image_size, resize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    infer_channel_dimension_format,
     is_batched,
     to_numpy_array,
     valid_images,
-    infer_channel_dimension_format
 )
-from ...utils import logging
-from ...utils import TensorType, is_pytesseract_available, logging, requires_backends
+from ...utils import is_pytesseract_available, logging, requires_backends
 
 
 # soft dependency
@@ -53,8 +50,9 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: np.ndarray, lang: Optional[str], tesseract_config: Optional[str]):
+def apply_tesseract(image: np.ndarray, lang: Optional[str], tesseract_config: Optional[str] = None):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
+    tesseract_config = tesseract_config if tesseract_config is not None else ""
 
     # apply OCR
     pil_image = to_pil_image(image)
@@ -131,7 +129,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         resample: PIL.Image.Resampling = PIL.Image.Resampling.BILINEAR,
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,
-        tesseract_config: Optional[str] = None,
+        tesseract_config: Optional[str] = "",
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
@@ -197,8 +195,8 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             apply_ocr (`bool`, *optional*, defaults to `self.apply_ocr`):
                 Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
             ocr_lang (`str`, *optional*, defaults to `self.ocr_lang`):
-                The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English
-                is used.
+                The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
+                used.
             tesseract_config (`str`, *optional*, defaults to `self.tesseract_config`):
                 Any additional custom configuration flags that are forwarded to the `config` parameter when calling
                 Tesseract.
@@ -252,9 +250,10 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         images = [flip_channel_order(image) for image in images]
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
-        data = {"pixel_values": images}
+        data = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
         if apply_ocr:
+            # FIXME - do we want to encode these or leave as lists?
             data["words"] = words_batch
             data["boxes"] = boxes_batch
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return data
