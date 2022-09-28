@@ -355,3 +355,105 @@ def center_crop(
     new_image = new_image[..., max(0, top) : min(new_height, bottom), max(0, left) : min(new_width, right)]
     new_image = to_channel_dimension_format(new_image, output_data_format)
     return new_image
+
+
+def rotate(
+    image: np.ndarray,
+    angle: float,
+    resample: PIL.Image.Resampling = PIL.Image.Resampling.NEAREST,
+    expand: Optional[bool] = False,
+    center: Optional[Tuple[float, float]] = None,
+    translate: Optional[Tuple[float, float]] = None,
+    fillcolor: Optional[Union[int, Tuple[int, int, int]]] = None,
+    data_format: Optional[ChannelDimension] = None,
+    return_numpy: bool = True
+) -> np.ndarray:
+    """
+    Rotates `image` by `angle` degrees clockwise around the center of the image.
+
+    Args:
+        image (`np.ndarray`):
+            The image to rotate.
+        angle (`float`):
+            The angle to rotate the image by.
+        resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.NEAREST`):
+            The resampling filter to use for interpolation.
+        expand (`bool`, *optional*, defaults to `False`):
+            Whether to expand the image to fit the rotated image. If False, the putput image is made
+            the same size as the input image. It assumes rotation about the center and no translation.
+        center (`Tuple[float, float]`, *optional*, defaults to `None`):
+            The center of rotation. If `None`, the center of the image is used.
+        translate (`Tuple[float, float]`, *optional*, defaults to `None`):
+            The translation to apply after rotation. If `None`, no translation is applied.
+        data_format (`ChannelDimension`, *optional*, defaults to `None`):
+            The channel dimension format of the output image. If `None`, will use the inferred format from the input.
+        return_numpy (`bool`, *optional*, defaults to `True`):
+            Whether to return the output image as a `np.ndarray`. If set to False a `PIL.Image.Image` is returned.
+            Flag is for backwards compatibility.
+    """
+    # For all transformations, we want to keep the same data format as the input image unless otherwise specified.
+    # The resized image from PIL will always have channels last, so find the input format first.
+    data_format = infer_channel_dimension_format(image) if data_format is None else data_format
+
+    if not isinstance(image, np.ndarray):
+        raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
+
+    # To maintain backwards compatibility with the rotating done in previous image feature extractors, we use
+    # the pillow library to resize the image and then convert back to numpy
+    # PIL expects image to have channels last
+    image = to_channel_dimension_format(image, ChannelDimension.LAST)
+    image = to_pil_image(image)
+
+    image = image.rotate(angle, resample, expand, center, translate, fillcolor)
+
+    if return_numpy:
+        image = np.array(image)
+        image = to_channel_dimension_format(image, data_format)
+    return image
+
+
+def make_thumbnail(
+    image: np.ndarray,
+    size: Tuple[int, int],
+    resample: Optional[PIL.Image.Resampling] = None,
+    data_format: Optional[ChannelDimension] = None,
+    return_numpy: bool = True
+) -> np.ndarray:
+    """
+    Make a thumbnail of `image` no larger than the given `size`.
+
+    Args:
+        image (`np.ndarray`):
+            The image to resize.
+        size (`Tuple[int, int]`):
+            The size to resize the image to.
+        resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC` if PIL version >= 2.5.0, else `PIL.Image.Resampling.NEAREST`):
+            The resampling filter to use for interpolation.
+        data_format (`ChannelDimension`, *optional*, defaults to `None`):
+            The channel dimension format of the output image. If `None`, will use the inferred format from the input.
+        return_numpy (`bool`, *optional*, defaults to `True`):
+            Whether to return the output image as a `np.ndarray`. If set to False a `PIL.Image.Image` is returned.
+            Flag is for backwards compatibility.
+    """
+    # For all transformations, we want to keep the same data format as the input image unless otherwise specified.
+    # The resized image from PIL will always have channels last, so find the input format first.
+    data_format = infer_channel_dimension_format(image) if data_format is None else data_format
+    height, width = size
+
+    if not isinstance(image, np.ndarray):
+        raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
+
+    # To maintain backwards compatibility with the thumbnail making done in previous image feature extractors, we
+    # use the pillow library and then convert back to numpy
+    # PIL expects image to have channels last
+    image = to_channel_dimension_format(image, ChannelDimension.LAST)
+    image = to_pil_image(image)
+
+    # .thumbnail modifies the image in place, but casting from np.ndarray to PIL.Image.Image means
+    # we aren't modifying our input
+    image.thumbnail((width, height), resample)
+
+    if return_numpy:
+        image = np.array(image)
+        image = to_channel_dimension_format(image, data_format)
+    return image
