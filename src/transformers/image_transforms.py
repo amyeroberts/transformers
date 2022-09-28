@@ -366,7 +366,7 @@ def rotate(
     translate: Optional[Tuple[float, float]] = None,
     fillcolor: Optional[Union[int, Tuple[int, int, int]]] = None,
     data_format: Optional[ChannelDimension] = None,
-    return_numpy: bool = True
+    return_numpy: bool = True,
 ) -> np.ndarray:
     """
     Rotates `image` by `angle` degrees clockwise around the center of the image.
@@ -379,8 +379,8 @@ def rotate(
         resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.NEAREST`):
             The resampling filter to use for interpolation.
         expand (`bool`, *optional*, defaults to `False`):
-            Whether to expand the image to fit the rotated image. If False, the putput image is made
-            the same size as the input image. It assumes rotation about the center and no translation.
+            Whether to expand the image to fit the rotated image. If False, the putput image is made the same size as
+            the input image. It assumes rotation about the center and no translation.
         center (`Tuple[float, float]`, *optional*, defaults to `None`):
             The center of rotation. If `None`, the center of the image is used.
         translate (`Tuple[float, float]`, *optional*, defaults to `None`):
@@ -388,8 +388,8 @@ def rotate(
         data_format (`ChannelDimension`, *optional*, defaults to `None`):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
         return_numpy (`bool`, *optional*, defaults to `True`):
-            Whether to return the output image as a `np.ndarray`. If set to False a `PIL.Image.Image` is returned.
-            Flag is for backwards compatibility.
+            Whether to return the output image as a `np.ndarray`. If set to False a `PIL.Image.Image` is returned. Flag
+            is for backwards compatibility.
     """
     # For all transformations, we want to keep the same data format as the input image unless otherwise specified.
     # The resized image from PIL will always have channels last, so find the input format first.
@@ -417,7 +417,7 @@ def make_thumbnail(
     size: Tuple[int, int],
     resample: Optional[PIL.Image.Resampling] = None,
     data_format: Optional[ChannelDimension] = None,
-    return_numpy: bool = True
+    return_numpy: bool = True,
 ) -> np.ndarray:
     """
     Make a thumbnail of `image` no larger than the given `size`.
@@ -432,8 +432,8 @@ def make_thumbnail(
         data_format (`ChannelDimension`, *optional*, defaults to `None`):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
         return_numpy (`bool`, *optional*, defaults to `True`):
-            Whether to return the output image as a `np.ndarray`. If set to False a `PIL.Image.Image` is returned.
-            Flag is for backwards compatibility.
+            Whether to return the output image as a `np.ndarray`. If set to False a `PIL.Image.Image` is returned. Flag
+            is for backwards compatibility.
     """
     # For all transformations, we want to keep the same data format as the input image unless otherwise specified.
     # The resized image from PIL will always have channels last, so find the input format first.

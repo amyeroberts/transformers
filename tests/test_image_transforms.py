@@ -37,12 +37,12 @@ if is_vision_available():
     from transformers.image_transforms import (
         center_crop,
         get_resize_output_image_size,
+        make_thumbnail,
         normalize,
         resize,
+        rotate,
         to_channel_dimension_format,
         to_pil_image,
-        rotate,
-        make_thumbnail
     )
 
 

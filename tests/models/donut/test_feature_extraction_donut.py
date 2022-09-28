@@ -39,11 +39,10 @@ class DonutFeatureExtractionTester(unittest.TestCase):
         parent,
         batch_size=7,
         num_channels=3,
-        image_size=18,
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=[20, 18],
+        image_size=None,
         do_thumbnail=True,
         do_align_axis=False,
         do_pad=True,
@@ -58,7 +57,7 @@ class DonutFeatureExtractionTester(unittest.TestCase):
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.size = size
+        self.image_size = {"height": 18, "width": 20} if image_size is None else image_size
         self.do_thumbnail = do_thumbnail
         self.do_align_axis = do_align_axis
         self.do_pad = do_pad
@@ -69,7 +68,7 @@ class DonutFeatureExtractionTester(unittest.TestCase):
     def prepare_feat_extract_dict(self):
         return {
             "do_resize": self.do_resize,
-            "size": self.size,
+            "image_size": self.image_size,
             "do_thumbnail": self.do_thumbnail,
             "do_align_long_axis": self.do_align_axis,
             "do_pad": self.do_pad,
@@ -95,7 +94,7 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
     def test_feat_extract_properties(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
-        self.assertTrue(hasattr(feature_extractor, "size"))
+        self.assertTrue(hasattr(feature_extractor, "image_size"))
         self.assertTrue(hasattr(feature_extractor, "do_thumbnail"))
         self.assertTrue(hasattr(feature_extractor, "do_align_long_axis"))
         self.assertTrue(hasattr(feature_extractor, "do_pad"))
@@ -121,8 +120,8 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.image_size["height"],
+                self.feature_extract_tester.image_size["width"],
             ),
         )
 
@@ -133,8 +132,8 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.image_size["height"],
+                self.feature_extract_tester.image_size["width"],
             ),
         )
 
@@ -153,8 +152,8 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.image_size["height"],
+                self.feature_extract_tester.image_size["width"],
             ),
         )
 
@@ -165,8 +164,8 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.image_size["height"],
+                self.feature_extract_tester.image_size["width"],
             ),
         )
 
@@ -185,8 +184,8 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.image_size["height"],
+                self.feature_extract_tester.image_size["width"],
             ),
         )
 
@@ -197,7 +196,7 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size[1],
-                self.feature_extract_tester.size[0],
+                self.feature_extract_tester.image_size["height"],
+                self.feature_extract_tester.image_size["width"],
             ),
         )
