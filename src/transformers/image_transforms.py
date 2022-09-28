@@ -357,6 +357,12 @@ def center_crop(
     return new_image
 
 
+def _center_to_corners_format_torch(bboxes_center: "torch.Tensor") -> "torch.Tensor":
+    x_c, y_c, w, h = bboxes_center.unbind(-1)
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    return torch.stack(b, dim=-1)
+
+
 def _center_to_corners_format_numpy(bboxes_center: "torch.Tensor") -> "torch.Tensor":
     x_c, y_c, w, h = bboxes_center.T
     bboxes_corners = np.stack([x_c - 0.5 * w, y_c - 0.5 * h, x_c + 0.5 * w, y_c + 0.5 * h], axis=-1)
