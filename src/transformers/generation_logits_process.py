@@ -717,7 +717,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
 
     def __call__(self, input_ids, scores):
         if input_ids.shape[1] == self.begin_index:
-            scores[:, self.begin_suppress_tokens] = -np.inf
+            scores[:, self.begin_suppress_tokens] = -float("inf")
 
         return scores
 
@@ -730,13 +730,13 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
         self.suppress_tokens = list(suppress_tokens)
 
     def __call__(self, input_ids, scores):
-        scores[:, self.suppress_tokens] = -np.inf
+        scores[:, self.suppress_tokens] = -float("inf")
         return scores
 
 
 class ForceTokensLogitsProcessor(LogitsProcessor):
-    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
-    are not sampled."""
+    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
+    are sampled at their corresponding index."""
 
     def __init__(self, force_token_map):
         self.force_token_map = dict(force_token_map)
@@ -745,5 +745,6 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
         generation_idx = input_ids.shape[-1]
         current_token = self.force_token_map.get(generation_idx, None)
         if current_token is not None:
-            scores[:, current_token] = np.inf
+            scores[:, :] = -float("inf")
+            scores[:, current_token] = 0
         return scores

@@ -34,19 +34,18 @@ NON_SPEECH_TOKENS = [
     4600, 4808, 5299, 5855, 6329, 7203, 9609, 9959, 10563, 10786,
     11420, 11709, 11907, 13163, 13697, 13700, 14808, 15306, 16410, 16791,
     17992, 19203, 19510, 20724, 22305, 22935, 27007, 30109, 30420, 33409,
-    34949, 40283, 40493, 40549, 47282, 49146, 50257, 50359, 50360
+    34949, 40283, 40493, 40549, 47282, 49146, 50257, 50359, 50360, 50361
 ]
 NON_SPEECH_TOKENS_MULTI = [
-    1, 2, 6, 7, 8, 9,
-    10, 12, 14, 25, 26, 27, 28, 29, 31, 58,
-    59, 60, 61, 62, 63, 90, 91, 92, 93, 359,
-    503, 522, 542, 873, 893, 902, 918, 922, 931, 1350,
-    1853, 1982, 2460, 2627, 3246, 3253, 3268, 3536, 3846, 3961,
-    4183, 4667, 6585, 6647, 7273, 9061, 9383, 10428, 10929, 11938,
-    12033, 12331, 12562, 13793, 14157, 14635, 15265, 15618, 16553, 16604,
-    18362, 18956, 20075, 21675, 22520, 26130, 26161, 26435, 28279, 29464,
-    31650, 32302, 32470, 36865, 42863, 47425, 49870, 50254, 50257, 50360,
-    50359
+    1, 2, 6, 7, 8, 9, 10, 12, 14, 25,
+    26, 27, 28, 29, 31, 58, 59, 60, 61, 62,
+    63, 90, 91, 92, 93, 359, 503, 522, 542, 873,
+    893, 902, 918, 922, 931, 1350, 1853, 1982, 2460, 2627,
+    3246, 3253, 3268, 3536, 3846, 3961, 4183, 4667, 6585, 6647,
+    7273, 9061, 9383, 10428, 10929, 11938, 12033, 12331, 12562, 13793,
+    14157, 14635, 15265, 15618, 16553, 16604, 18362, 18956, 20075, 21675,
+    22520, 26130, 26161, 26435, 28279, 29464, 31650, 32302, 32470, 36865,
+    42863, 47425, 49870, 50254, 50258, 50360, 50361, 50362
 ]
 # fmt: on
 
@@ -91,11 +90,11 @@ class WhisperConfig(PretrainedConfig):
             Corresponds to the "<|startoftranscript|>" token, which is automatically used when no `decoder_input_ids`
             are provided to the `generate` function. It is used to guide the model`s generation process depending on
             the task.
-        use_cache (`bool`, *optional*, defaults to True):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        is_encoder_decoder (`bool`, *optional*, defaults to True):
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
-        activation_function (`str`, *optional*, defaults to "gelu"):
+        activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         d_model (`int`, *optional*, defaults to 256):
@@ -123,7 +122,7 @@ class WhisperConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie input and output embeddings.
-        suppress_tokens (`List[int]`, *optional*, defaults to None):
+        suppress_tokens (`List[int]`, *optional*):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
             function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI each correspond to the `english-only` and the
             `multilingual` model.
