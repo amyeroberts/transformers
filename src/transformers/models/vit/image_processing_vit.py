@@ -14,6 +14,7 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
+import warnings
 from typing import Iterable, List, Optional, Union
 
 import numpy as np
@@ -156,6 +157,13 @@ class ViTImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
+        if isinstance(image, PIL.Image.Image):
+            warnings.warn("PIL will not be supported as input in the next release. Please use numpy arrays instead.")
+            # Convert PIL image to numpy array with the same logic as in the previous feature extractor - casting to
+            # numpy array and dividing by 255.
+            image = to_numpy_array(image)
+            image = self.rescale(image, scale=1 / 255)
+
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
     def preprocess(
