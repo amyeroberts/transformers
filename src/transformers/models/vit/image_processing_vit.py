@@ -109,10 +109,16 @@ class ViTImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`int` or `Iterable[int]`):
                 Size of the output image.
-            resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
-                PIL image resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+            resample:
+                `PIL.Image` resampling filter to use when resizing the image e.g. `PIL.Image.BILINEAR`.
+            data_format (`ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If `None`, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
         """
         output_size = get_resize_output_image_size(image, size=size)
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
@@ -120,7 +126,7 @@ class ViTImageProcessor(BaseImageProcessor):
     def rescale(
         self,
         image: np.ndarray,
-        scale: Union[int, float],
+        scale: float,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
@@ -130,10 +136,16 @@ class ViTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If `None`, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
@@ -152,11 +164,17 @@ class ViTImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to normalize.
             image_mean (`float` or `List[float]`):
-                Image mean.
+                Image mean to use for normalization.
             image_std (`float` or `List[float]`):
-                Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                Image standard deviation to use for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If `None`, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
         """
         if isinstance(image, PIL.Image.Image):
             warnings.warn("PIL will not be supported as input in the next release. Please use numpy arrays instead.")
@@ -170,17 +188,17 @@ class ViTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: int = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[int] = None,
         resample=None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-    ) -> PIL.Image.Image:
+        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+    ):
         """
         Preprocess an image or batch of images.
 
@@ -213,8 +231,8 @@ class ViTImageProcessor(BaseImageProcessor):
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
