@@ -312,8 +312,25 @@ def normalize(
 def center_crop(
     image: np.ndarray,
     size: Tuple[int, int],
-    data_format: Optional[ChannelDimension] = None,
+    data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
+    """
+    Crops the `image` to the specified `size` using a center crop. Note that if the image is too small to be cropped
+    to the size given, it will be padded (so the returned result will always be of size `size`).
+
+    Args:
+        image (`np.ndarray`):
+            The image to crop.
+        size (`Tuple[int, int]`):
+            The target size for the cropped image.
+        data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+    Returns:
+        `np.ndarray`: The cropped image.
+    """
     if not isinstance(image, np.ndarray):
         raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
 
