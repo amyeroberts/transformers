@@ -46,8 +46,6 @@ class ViTImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        # size (`int` *optional*, defaults to 224):
-        #     Set the class default for the `size` parameter. Controls the size of the output image.
         size (`dict`, *optional*, defaults to {"height": 224, "width": 224}):
             Set the class default for the `size` parameter. Controls the size of the output image.
         resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):

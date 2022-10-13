@@ -14,7 +14,8 @@
 # limitations under the License.
 
 import unittest
-from transformers.image_processing_utils import convert_size_to_size_dict
+
+from transformers.image_processing_utils import get_size_dict
 
 
 class ImageProcessingUtilsTester(unittest.TestCase):
