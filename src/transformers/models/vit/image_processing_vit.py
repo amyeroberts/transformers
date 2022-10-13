@@ -14,15 +14,15 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
-from typing import Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 import PIL.Image
 
 from transformers.utils.generic import TensorType
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import get_resize_output_image_size, normalize, rescale, resize, to_channel_dimension_format
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -46,7 +46,9 @@ class ViTImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`int` *optional*, defaults to 224):
+        # size (`int` *optional*, defaults to 224):
+        #     Set the class default for the `size` parameter. Controls the size of the output image.
+        size (`dict`, *optional*, defaults to {"height": 224, "width": 224}):
             Set the class default for the `size` parameter. Controls the size of the output image.
         resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
@@ -70,7 +72,7 @@ class ViTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: int = 224,
+        size: Optional[Dict[str, int]] = None,
         resample=PIL.Image.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -79,6 +81,9 @@ class ViTImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         **kwargs
     ) -> None:
+        # For backwards compatibility with the old `size` parameter.
+        size = 224 if size is None else size
+        size = get_size_dict(size)
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.do_rescale = do_rescale
@@ -92,7 +97,7 @@ class ViTImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Union[int, Iterable[int]],
+        size: Dict[str, int],
         resample=PIL.Image.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
@@ -106,8 +111,8 @@ class ViTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`int` or `Iterable[int]`):
-                Size of the output image.
+            size (`dict`):
+                Dictionary in the format {"height": int, "width": int} specifying the size of the output image.
             resample:
                 `PIL.Image` resampling filter to use when resizing the image e.g. `PIL.Image.BILINEAR`.
             data_format (`ChannelDimension`, *optional*):
@@ -119,15 +124,13 @@ class ViTImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        output_size = get_resize_output_image_size(image, size=size)
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        size = get_size_dict(size)
+        return resize(
+            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
+        )
 
     def rescale(
-        self,
-        image: np.ndarray,
-        scale: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
     ) -> np.ndarray:
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -181,7 +184,7 @@ class ViTImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[int] = None,
+        size: Optional[Union[int, Iterable[int], Dict[str, int]]] = None,
         resample=None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -199,8 +202,8 @@ class ViTImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`int`, *optional*, defaults to `self.size`):
-                Size of the output image.
+            size (`dict`, *optional*, defaults to `self.size`):
+                Dictionary in the format {"height": int, "width": int} specifying the size of the output image.
             resample (`PIL.Image` resampling filter, *optional*, defaults to `self.resample`):
                 `PIL.Image` resampling filter to use if resizing the image e.g. `PIL.Image.BILINEAR`. Only has an
                 effect if `do_resize` is set to `True`.
@@ -230,10 +233,12 @@ class ViTImageProcessor(BaseImageProcessor):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         resample = resample if resample is not None else self.resample
-        size = size if size is not None else self.size
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+
+        size = size if size is not None else self.size
+        size_dict = get_size_dict(size)
 
         if not is_batched(images):
             images = [images]
@@ -254,7 +259,7 @@ class ViTImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if do_resize:
-            images = [self.resize(image=image, size=size, resample=resample) for image in images]
+            images = [self.resize(image=image, size=size_dict, resample=resample) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
