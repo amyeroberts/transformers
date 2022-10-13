@@ -14,15 +14,15 @@
 # limitations under the License.
 """Image processor class for DeiT."""
 
-from typing import Iterable, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import PIL.Image
 
 from transformers.utils.generic import TensorType
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import center_crop, get_resize_output_image_size, normalize, rescale, resize, to_channel_dimension_format
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -46,23 +46,23 @@ class DeiTImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
+            Set the class default for the `size` parameter. Controls the size of the image after `resize`.
+        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
+            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         do_center_crop (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_center_crop`. Controls whether to center crop the image. If the input
-            size is smaller than `crop_size` along any edge, the image is padded with 0's and then center cropped.
+            Set the class default for `do_center_crop`. Controls whether to center crop the image. If the input size is
+            smaller than `crop_size` along any edge, the image is padded with 0's and then center cropped.
+        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+            Set the class default for the `crop_size` parameter. Desired output size when applying center-cropping.
+            Only has an effect if `do_center_crop` is set to `True`.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
             specified scale `rescale_factor`.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
-        size (`int` *optional*, defaults to 256):
-            Set the class default for the `size` parameter. Size of the image.
-        resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
-        crop_size (`int`, *optional*, defaults to `224`):
-            Set the class default for the `crop_size` parameter. Desired output size when applying center-cropping.
-            Only has an effect if `do_center_crop` is set to `True`.Controls the size of the image's (height, width)
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Set the class default for `do_normalize`. Controls whether to normalize the image.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Set the class default for `image_mean`. This is a float or list of floats of length of the number of
             channels for
@@ -75,10 +75,10 @@ class DeiTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: int = 256,
-        resample: PIL.Image.Resampling = PIL.Image.Resampling.BICUBIC,
+        size: Dict[str, int] = None,
+        resample=PIL.Image.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: int = 224,
+        crop_size: Dict[str, int] = None,
         rescale_factor: Union[int, float] = 1 / 255,
         do_rescale: bool = True,
         do_normalize: bool = True,
@@ -87,6 +87,11 @@ class DeiTImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
+        size = size if size is not None else {"height": 256, "width": 256}
+        size = get_size_dict(size)
+        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
+        crop_size = get_size_dict(crop_size)
+
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
@@ -101,54 +106,50 @@ class DeiTImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Union[int, Iterable[int]],
-        resample: PIL.Image.Resampling = PIL.Image.Resampling.BICUBIC,
+        size: Dict[str, int],
+        resample=PIL.Image.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
         """
-        Resize an image.
-
-        If size is an int, then the image is resized to (size, size). If size is an iterable of length 2, then the
-        image is resized to (size[0], size[1]).
+        Resize an image to (size["height"], size["width"]) using the specified resampling filter.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`int` or `Iterable[int]`):
+            size (`Dict[str, int]`):
                 Size of the output image.
-            resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.BICUBIC`):
-                Resampling filter to use when resiizing the image.
+            resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
+                Resampling filter to use when resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        output_size = get_resize_output_image_size(image, size=size)
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        size = get_size_dict(size)
+        return resize(
+            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
+        )
 
     def center_crop(
         self,
         image: np.ndarray,
-        crop_size: Union[int, Iterable[int]],
+        crop_size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
         """
-        Center crop an image.
-
-        If crop_size is an int, then the image is cropped to (crop_size, crop_size). If crop_size is an iterable of
-        length 2, then the image is cropped to (crop_size[0], crop_size[1]). If the input size is smaller than
+        Center crop an image to (crop_size["height"], crop_size["width"]). If the input size is smaller than
         `crop_size` along any edge, the image is padded with 0's and then center cropped.
 
         Args:
             image (`np.ndarray`):
                 Image to center crop.
-            crop_size (`int` or `Iterable[int]`):
+            crop_size (`Dict[str, int]`):
                 Size of the output image.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        crop_size = (crop_size, crop_size) if isinstance(crop_size, int) else crop_size
-        return center_crop(image, size=crop_size, data_format=data_format, **kwargs)
+        crop_size = get_size_dict(crop_size)
+        return center_crop(image, size=(crop_size["height"], crop_size["width"]), data_format=data_format, **kwargs)
 
     def rescale(
         self,
@@ -197,8 +198,8 @@ class DeiTImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: bool = None,
-        size: int = None,
-        resample: PIL.Image.Resampling = None,
+        size: Dict[str, int] = None,
+        resample=None,
         do_center_crop: bool = None,
         crop_size: int = None,
         do_rescale: bool = None,
@@ -217,16 +218,16 @@ class DeiTImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`int`, *optional*, defaults to `self.size`):
-                Size of the image.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PIL.Image.Resampling`,
-                Only has an effect if `do_resize` is set to `True`.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image after `resize`.
+            resample (`PIL.Image` resampling filter, *optional*, defaults to `self.resample`):
+                PIL.Image resampling filter to use if resizing the image e.g. PIL.Image.BILINEAR. Only has an effect if
+                `do_resize` is set to `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image.
-            crop_size (`int`, *optional*, defaults to `self.crop_size`):
-                Size of the image after center crop. If one edge the image is smaller than `crop_size`, it will be padded
-                with zeros and then cropped
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+                Size of the image after center crop. If one edge the image is smaller than `crop_size`, it will be
+                padded with zeros and then cropped
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -250,13 +251,13 @@ class DeiTImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        resample = resample if resample is not None else self.resample
         size = size if size is not None else self.size
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        resample = resample if resample is not None else self.resample
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 

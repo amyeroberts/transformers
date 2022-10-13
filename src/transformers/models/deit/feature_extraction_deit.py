@@ -14,8 +14,8 @@
 # limitations under the License.
 """Feature extractor class for DeiT."""
 
-from .image_processing_deit import DeiTImageProcessor
 from ...utils import logging
+from .image_processing_deit import DeiTImageProcessor
 
 
 logger = logging.get_logger(__name__)
