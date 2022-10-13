@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
+from typing import Dict, Iterable, Optional, Union
+
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .feature_extraction_utils import FeatureExtractionMixin
 from .utils import logging
@@ -52,3 +55,57 @@ class BaseImageProcessor(ImageProcessorMixin):
 
     def preprocess(self, images, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each image processor must implement its own preprocess method")
+
+
+def get_size_dict(
+    size: Union[int, Iterable[int], Dict[str, int]] = None,
+    max_size: Optional[int] = None,
+    height_width_order: bool = True,
+    default_to_square: bool = True,
+) -> dict:
+    """
+    Converts the old size parameter in the config into the new dict expected in the config.
+
+    This is the ensure backwards compatibility with the old feature extractor configs and removes ambiguity over
+    whether the tuple is in (height, width) or (width, height) format
+    """
+    size_dict = {}
+
+    if isinstance(size, dict):
+        size_keys = set(size.keys())
+        if (
+            size_keys != set(["height", "width"])
+            and size_keys != set(["shortest_edge"])
+            and size_keys != set(["shortest_edge", "longest_edge"])
+        ):
+            raise ValueError(
+                "The size dict must contain either the keys ('height', 'width') or ('shortest_edge')"
+                f"or ('shortest_edge', 'longest_edge') but got {size_keys}"
+            )
+        return size
+
+    elif isinstance(size, int) and default_to_square:
+        if max_size is not None:
+            raise ValueError("Cannot specify both size as an int, with default_to_square=True and max_size")
+        warnings.warn(
+            "The size parameter should be a dictionary with keys 'height' and 'width' or 'shortest_edge' instead of an"
+            " int. Setting configuration as {'height': size, 'width': size}.",
+            FutureWarning,
+        )
+        size_dict = {"height": size, "width": size}
+    elif isinstance(size, int) and not default_to_square:
+        warnings.warn(
+            "The size parameter should be a dictionary with keys 'height' and 'width' or 'shortest_edge' instead of an"
+            " int. Setting configuration as {'shortest_edge': size}.",
+            FutureWarning,
+        )
+        if max_size is not None:
+            size_dict = {"shortest_edge": size, "longest_edge": max_size}
+        else:
+            size_dict = {"shortest_edge": size}
+    elif isinstance(size, (tuple, list)) and height_width_order:
+        size_dict = {"height": size[0], "width": size[1]}
+    elif isinstance(size, (tuple, list)) and not height_width_order:
+        size_dict = {"height": size[1], "width": size[0]}
+
+    return size_dict
