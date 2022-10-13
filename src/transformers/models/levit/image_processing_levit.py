@@ -14,14 +14,14 @@
 # limitations under the License.
 """Image processor class for LeViT."""
 
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 import PIL
 
 from transformers.utils.generic import TensorType
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_crop,
     get_resize_output_image_size,
@@ -34,6 +34,7 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
+    ImageInput,
     is_batched,
     to_numpy_array,
     valid_images,
@@ -52,15 +53,19 @@ class LevitImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the shortest edge of the
             input to int(256/224 *`size`).
-        size (`int` or `Tuple(int)`, *optional*, defaults to 224):
-            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then shorter side of input will be resized to 'size'.
-        resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
+        size (`Dict[str, int]`, *optional*, defaults to {"shortest_edge": 224}):
+            Desired image size after `resize`. If size is a dict with keys "width" and "height", the image will be
+            resized to (height, width). If size is a dict with key "shortest_edge", the shortest edge value `c` is
+            rescaled to int(`c` * (256/224)). The smaller edge of the image will be matched to this value i.e, if
+            height > width, then image will be rescaled to (size * height / width, size).
+        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
             if `do_resize` is set to `True`.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether or not to center crop the input to `size`.
+        crop_size (`Dict`, *optional*, defaults to {"height": 224, "width": 224}):
+            Desired image size after `center_crop`.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
             specified scale `rescale_factor`.
@@ -79,9 +84,10 @@ class LevitImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: int = 224,
-        resample: PIL.Image.Resampling = PIL.Image.Resampling.BICUBIC,
+        size: Dict[str, int] = None,
+        resample=PIL.Image.BICUBIC,
         do_center_crop: bool = True,
+        crop_size: Dict[str, int] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -90,10 +96,16 @@ class LevitImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
+        size = size if size is not None else {"shortest_edge": 224}
+        size = get_size_dict(size, default_to_square=False)
+        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
+        crop_size = get_size_dict(crop_size)
+
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
         self.do_center_crop = do_center_crop
+        self.crop_size = crop_size
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
@@ -103,39 +115,47 @@ class LevitImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Union[int, Iterable[int]],
-        resample: PIL.Image.Resampling = PIL.Image.BICUBIC,
+        size: Dict[str, int],
+        resample=PIL.Image.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
         """
         Resize an image.
 
-        If size is an int `c`, the value is rescaled to int(`c` * (256/224)). The smaller edge of the image will be
-        matched to this value i.e, if height > width, then image will be rescaled to (size * height / width, size). If
-        size is a iterable of length 2 (h, w), then the image is resized to (h, w).
+        If size is a dict with keys "width" and "height", the image will be resized to (height, width).
+
+        If size is a dict with key "shortest_edge", the shortest edge value `c` is rescaled to int(`c` * (256/224)).
+        The smaller edge of the image will be matched to this value i.e, if height > width, then image will be rescaled
+        to (size * height / width, size).
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`int` or `Iterable[int]`):
-                Size of the output image.
-            resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.BICUBIC`):
+            size (`Dict[str, int]`):
+                Size of the output image after resizing. If size is a dict with keys "width" and "height", the image
+                will be resized to (height, width). If size is a dict with key "shortest_edge", the shortest edge value
+                `c` is rescaled to int(`c` * (256/224)). The smaller edge of the image will be matched to this value
+                i.e, if height > width, then image will be rescaled to (size * height / width, size).
+            resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        if isinstance(size, int):
-            output_size = int((256 / 224) * size)
-            output_size = get_resize_output_image_size(image, size=output_size, default_to_square=False)
-        else:
-            output_size = size
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        size_dict = get_size_dict(size, default_to_square=False)
+        # size_dict is a dict with either keys "height" and "width" or "shortest_edge"
+        if "shortest_edge" in size:
+            shortest_edge = int((256 / 224) * size["shortest_edge"])
+            output_size = get_resize_output_image_size(image, size=shortest_edge, default_to_square=False)
+            size_dict = {"height": output_size[0], "width": output_size[1]}
+        return resize(
+            image, size=(size_dict["height"], size_dict["width"]), resample=resample, data_format=data_format, **kwargs
+        )
 
     def center_crop(
         self,
         image: np.ndarray,
-        size: Union[int, Tuple[int, int]],
+        size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
@@ -145,13 +165,13 @@ class LevitImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to center crop.
-            size (`Tuple[int, int]`):
-                Size of the output image.
+            size (`Dict[str, int]`):
+                Dict {"height": int, "width": int} specifying the size of the output image after cropping.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        size = (size, size) if isinstance(size, int) else size
-        return center_crop(image, size=size, data_format=data_format, **kwargs)
+        size = get_size_dict(size)
+        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def rescale(
         self,
@@ -187,9 +207,9 @@ class LevitImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            image_mean (`float` or `List[float]`):
+            mean (`float` or `List[float]`):
                 Image mean.
-            image_std (`float` or `List[float]`):
+            std (`float` or `List[float]`):
                 Image standard deviation.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -198,28 +218,72 @@ class LevitImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images,
-        do_normalize: Optional[bool] = None,
+        images: ImageInput,
         do_resize: Optional[bool] = None,
-        do_rescale: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
+        resample=None,
         do_center_crop: Optional[bool] = None,
-        size: Optional[Union[int, Iterable[int]]] = None,
-        resample: PIL.Image.Resampling = None,
+        crop_size: Optional[Dict[str, int]] = None,
+        do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, Iterable[float]]] = None,
         image_std: Optional[Union[float, Iterable[float]]] = None,
         return_tensors: Optional[TensorType] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
     ) -> BatchFeature:
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        """
+        Preprocess an image or batch of images to be used as input to a LeViT model.
+
+        Args:
+            images (`ImageInput`):
+                Image or batch of images to preprocess.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the output image after resizing. If size is a dict with keys "width" and "height", the image
+                will be resized to (height, width). If size is a dict with key "shortest_edge", the shortest edge value
+                `c` is rescaled to int(`c` * (256/224)). The smaller edge of the image will be matched to this value
+                i.e, if height > width, then image will be rescaled to (size * height / width, size).
+            resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
+                Resampling filter to use when resiizing the image.
+            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
+                Whether to center crop the image.
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+                Size of the output image after center cropping. Crops images to (crop_size["height"],
+                crop_size["width"]).
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image pixel values by `rescaling_factor` - typical to values between 0 and 1.
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Factor to rescale the image pixel values by.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image pixel values by `image_mean` and `image_std`.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Mean to normalize the image pixel values by.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Standard deviation to normalize the image pixel values by.
+            return_tensors (`str` or `TensorType`, *optional*, defaults to `None`):
+                Return type of the output. `None` returns a list of `np.ndarray`. `"np"` returns a `np.ndarray`. `"tf"`
+                returns a `tf.Tensor`. `"pt"` returns a `pt.Tensor`. `"jax"` returns a `jax.numpy.ndarray`.
+            data_format (`str` or `ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. If `None`, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+        """
         do_resize = do_resize if do_resize is not None else self.do_resize
+        resample = resample if resample is not None else self.resample
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+
         size = size if size is not None else self.size
-        resample = resample if resample is not None else self.resample
+        size = get_size_dict(size, default_to_square=False)
+        crop_size = crop_size if crop_size is not None else self.crop_size
+        crop_size = get_size_dict(crop_size)
 
         if not is_batched(images):
             images = [images]
@@ -243,7 +307,7 @@ class LevitImageProcessor(BaseImageProcessor):
             images = [self.resize(image, size, resample) for image in images]
 
         if do_center_crop:
-            images = [self.center_crop(image, size) for image in images]
+            images = [self.center_crop(image, crop_size) for image in images]
 
         if do_rescale:
             images = [self.rescale(image, rescale_factor) for image in images]

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import TYPE_CHECKING, List, Tuple, Union
+from typing import TYPE_CHECKING, Iterable, Tuple, Union
 
 import numpy as np
 
@@ -39,9 +39,19 @@ if TYPE_CHECKING:
     if is_torch_available():
         import torch
 
+    if is_tf_available():
+        import tensorflow as tf
+
 
 ImageInput = Union[
-    "PIL.Image.Image", np.ndarray, "torch.Tensor", List["PIL.Image.Image"], List[np.ndarray], List["torch.Tensor"]
+    "PIL.Image.Image",
+    np.ndarray,
+    "torch.Tensor",
+    "tf.Tensor",
+    Iterable["PIL.Image.Image"],
+    Iterable[np.ndarray],
+    Iterable["torch.Tensor"],
+    Iterable["tf.Tensor"],
 ]  # noqa
 
 

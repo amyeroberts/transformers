@@ -45,6 +45,7 @@ class LevitFeatureExtractionTester(unittest.TestCase):
         do_resize=True,
         size=18,
         do_center_crop=True,
+        crop_size=18,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
@@ -58,6 +59,7 @@ class LevitFeatureExtractionTester(unittest.TestCase):
         self.do_resize = do_resize
         self.size = size
         self.do_center_crop = do_center_crop
+        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -69,7 +71,8 @@ class LevitFeatureExtractionTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "do_resize": self.do_resize,
             "do_center_crop": self.do_center_crop,
-            "size": self.size,
+            "size": {"shortest_edge": self.size},
+            "crop_size": {"height": self.crop_size, "width": self.crop_size},
         }
 
 
