@@ -182,7 +182,7 @@ class ViTImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Union[int, Iterable[int], Dict[str, int]]] = None,
+        size: Dict[str, int] = None,
         resample=None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
