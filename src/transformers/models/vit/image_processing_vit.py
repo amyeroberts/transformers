@@ -123,11 +123,7 @@ class ViTImageProcessor(BaseImageProcessor):
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def rescale(
-        self,
-        image: np.ndarray,
-        scale: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
     ) -> np.ndarray:
         """
         Rescale an image by a scale factor. image = image * scale.

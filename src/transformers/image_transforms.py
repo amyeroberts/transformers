@@ -321,8 +321,8 @@ def center_crop(
     data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
     """
-    Crops the `image` to the specified `size` using a center crop. Note that if the image is too small to be cropped
-    to the size given, it will be padded (so the returned result will always be of size `size`).
+    Crops the `image` to the specified `size` using a center crop. Note that if the image is too small to be cropped to
+    the size given, it will be padded (so the returned result will always be of size `size`).
 
     Args:
         image (`np.ndarray`):
@@ -337,6 +337,11 @@ def center_crop(
     Returns:
         `np.ndarray`: The cropped image.
     """
+    if isinstance(image, PIL.Image.Image):
+        warnings.warn("PIL will not be supported as input in the next release. Please use numpy arrays instead.")
+        # Convert PIL image to numpy array
+        image = to_numpy_array(image)
+
     if not isinstance(image, np.ndarray):
         raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
 
