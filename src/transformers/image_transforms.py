@@ -329,10 +329,11 @@ def center_crop(
             The image to crop.
         size (`Tuple[int, int]`):
             The target size for the cropped image.
-        data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+        data_format (`str` or `ChannelDimension`, *optional*):
             The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            If `None`, will use the inferred format of the input image.
 
     Returns:
         `np.ndarray`: The cropped image.
