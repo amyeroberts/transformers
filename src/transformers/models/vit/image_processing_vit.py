@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import PIL.Image
