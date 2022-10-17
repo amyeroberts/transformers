@@ -135,7 +135,7 @@ class ViltImageProcessor(BaseImageProcessor):
             Set the class default for the `size` parameter. Resize the shorter side of the input to the given size.
             Should be an integer. The longer side will be limited to under int((1333 / 800) * size) while preserving
             the aspect ratio. Only has an effect if `do_resize` is set to `True`.
-        resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
+        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         size_divisor (`int`, *optional*, defaults to 32):
             Set the class default for `size_divisor`. The size by which to make sure both the height and width can be
@@ -163,7 +163,7 @@ class ViltImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: int = 384,
-        resample: PIL.Image.Resampling = PIL.Image.Resampling.BICUBIC,
+        resample = PIL.Image.BICUBIC,
         size_divisor: int = 32,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -193,7 +193,7 @@ class ViltImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: int,
         size_divisor: int = 32,
-        resample: PIL.Image.Resampling = PIL.Image.Resampling.BICUBIC,
+        resample=PIL.Image.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
@@ -210,7 +210,7 @@ class ViltImageProcessor(BaseImageProcessor):
                 Size of the output image.
             size_divisor (`int`):
                 The image is resized to a size that is a multiple of this value.
-            resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.BICUBIC`):
+            resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -341,16 +341,16 @@ class ViltImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: int = None,
-        size_divisor: int = None,
-        resample: PIL.Image.Resampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[int] = None,
+        size_divisor: Optional[int] = None,
+        resample=None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: bool = None,
+        do_pad: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
     ) -> PIL.Image.Image:
@@ -367,8 +367,7 @@ class ViltImageProcessor(BaseImageProcessor):
             size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
                 The image is resized to a size that is a multiple of this value.
             resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PIL.Image.Resampling`,
-                Only has an effect if `do_resize` is set to `True`.
+                Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
