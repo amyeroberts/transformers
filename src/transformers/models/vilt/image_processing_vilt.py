@@ -212,7 +212,7 @@ class ViltImageProcessor(BaseImageProcessor):
                 The image is resized to a size that is a multiple of this value.
             resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
                 Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         longer = int(1333 / 800 * size)
@@ -234,7 +234,7 @@ class ViltImageProcessor(BaseImageProcessor):
                 Image to rescale.
             scale (`int` or `float`):
                 Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
@@ -257,7 +257,7 @@ class ViltImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`):
                 Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
@@ -277,9 +277,9 @@ class ViltImageProcessor(BaseImageProcessor):
                 Image to pad.
             output_size (`Tuple[int, int]`):
                 Output size of the image.
-            input_channel_dimension (`ChannelDimension`, *optional*, defaults to `None`):
+            input_channel_dimension (`ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be inferred from the input image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return pad_image(
@@ -313,14 +313,14 @@ class ViltImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
-            return_tensors (`str`, *optional*, defaults to `None`):
+            return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         FutureWarning(
@@ -381,7 +381,7 @@ class ViltImageProcessor(BaseImageProcessor):
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image to the (max_height, max_width) in the batch. If True, a pixel mask is also
                 created and returned.
-            return_tensors (`str`, *optional*, defaults to `None`):
+            return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
