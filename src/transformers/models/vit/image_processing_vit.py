@@ -182,7 +182,7 @@ class ViTImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Union[int, Iterable[int], Dict[str, int]]] = None,
+        size: Dict[str, int] = None,
         resample=None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -215,7 +215,7 @@ class ViTImageProcessor(BaseImageProcessor):
                 Image mean to use if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use if `do_normalize` is set to `True`.
-            return_tensors (`str`, *optional*, defaults to `None`):
+            return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
