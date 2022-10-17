@@ -121,7 +121,7 @@ class DeiTImageProcessor(BaseImageProcessor):
                 Size of the output image.
             resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
                 Resampling filter to use when resizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
@@ -145,7 +145,7 @@ class DeiTImageProcessor(BaseImageProcessor):
                 Image to center crop.
             crop_size (`Dict[str, int]`):
                 Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         crop_size = get_size_dict(crop_size)
@@ -166,7 +166,7 @@ class DeiTImageProcessor(BaseImageProcessor):
                 Image to rescale.
             scale (`int` or `float`):
                 Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
@@ -189,7 +189,7 @@ class DeiTImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`):
                 Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
@@ -238,7 +238,7 @@ class DeiTImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
-            return_tensors (`str`, *optional*, defaults to `None`):
+            return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
