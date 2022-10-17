@@ -342,8 +342,10 @@ def center_crop(
         `np.ndarray`: The cropped image.
     """
     if isinstance(image, PIL.Image.Image):
-        warnings.warn("PIL will not be supported as input in the next release. Please use numpy arrays instead.")
-        # Convert PIL image to numpy array
+        warnings.warn(
+            "PIL.Image.Image inputs are deprecated and will be removed in v4.26.0. Please use numpy arrays instead.",
+            FutureWarning,
+        )
         image = to_numpy_array(image)
 
     if not isinstance(image, np.ndarray):
