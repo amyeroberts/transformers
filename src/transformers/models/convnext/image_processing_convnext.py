@@ -19,7 +19,6 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 import PIL.Image
 
-import tree
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -109,29 +108,6 @@ class ConvNextImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
-    def center_crop(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ) -> np.ndarray:
-        """
-        Center crop an image to (`size["height"]`, `size["width"]`).
-
-        If the input size is smaller than `size` along any edge, the image is padded with 0's and then center cropped.
-
-        Args:
-            image (`np.ndarray`):
-                Image to center crop.
-            crop_size (`int` or `Iterable[int]`):
-                Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        size = get_size_dict(size, default_to_square=True)
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
-
     def resize(
         self,
         image: np.ndarray,
@@ -218,48 +194,6 @@ class ConvNextImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
-    def _preprocess_image(
-        self,
-        image: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        crop_pct: Optional[float] = None,
-        resample=None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-    ) -> np.ndarray:
-        """Preprocesses a single image."""
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_resize and size["shortest_edge"] < 384 and crop_pct is None:
-            raise ValueError("crop_pct must be specified if size < 384.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
-
-        # All transformations expect numpy arrays.
-        image = to_numpy_array(image)
-
-        if do_resize:
-            image = self.resize(image=image, size=size, crop_pct=crop_pct, resample=resample)
-
-        if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor)
-
-        if do_normalize:
-            image = self.normalize(image=image, mean=image_mean, std=image_std)
-
-        image = to_channel_dimension_format(image, data_format)
-        return image
-
     def preprocess(
         self,
         images: ImageInput,
@@ -334,22 +268,31 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        images = tree.map_structure(
-            lambda img: self.preprocess_image(
-                image=img,
-                do_resize=do_resize,
-                size=size,
-                crop_pct=crop_pct,
-                resample=resample,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                data_format=data_format,
-            ),
-            images,
-        )
+        if do_resize and size is None or resample is None:
+            raise ValueError("Size and resample must be specified if do_resize is True.")
+
+        if do_resize and size["shortest_edge"] < 384 and crop_pct is None:
+            raise ValueError("crop_pct must be specified if size < 384.")
+
+        if do_rescale and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+
+        if do_normalize and (image_mean is None or image_std is None):
+            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
+
+        if do_resize:
+            images = [self.resize(image=image, size=size, crop_pct=crop_pct, resample=resample) for image in images]
+
+        if do_rescale:
+            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+
+        if do_normalize:
+            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+
+        images = [to_channel_dimension_format(image, data_format) for image in images]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
