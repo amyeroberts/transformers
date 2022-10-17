@@ -129,7 +129,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 Image to center crop.
             crop_size (`int` or `Iterable[int]`):
                 Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         crop_size = (crop_size, crop_size) if isinstance(crop_size, int) else crop_size
@@ -159,7 +159,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 Percentage of the image to crop. Only has an effect if size < 384.
             resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.BICUBIC`):
                 Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         if size < 384:
@@ -191,7 +191,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 Image to rescale.
             scale (`int` or `float`):
                 Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
@@ -214,7 +214,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`):
                 Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
@@ -303,7 +303,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
-            return_tensors (`str`, *optional*, defaults to `None`):
+            return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
