@@ -139,7 +139,7 @@ class LevitImageProcessor(BaseImageProcessor):
                 i.e, if height > width, then image will be rescaled to (size * height / width, size).
             resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
                 Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size_dict = get_size_dict(size, default_to_square=False)
@@ -167,7 +167,7 @@ class LevitImageProcessor(BaseImageProcessor):
                 Image to center crop.
             size (`Dict[str, int]`):
                 Dict {"height": int, "width": int} specifying the size of the output image after cropping.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
@@ -188,7 +188,7 @@ class LevitImageProcessor(BaseImageProcessor):
                 Image to rescale.
             scale (`int` or `float`):
                 Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
@@ -211,7 +211,7 @@ class LevitImageProcessor(BaseImageProcessor):
                 Image mean.
             std (`float` or `List[float]`):
                 Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
@@ -262,9 +262,13 @@ class LevitImageProcessor(BaseImageProcessor):
                 Mean to normalize the image pixel values by.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Standard deviation to normalize the image pixel values by.
-            return_tensors (`str` or `TensorType`, *optional*, defaults to `None`):
-                Return type of the output. `None` returns a list of `np.ndarray`. `"np"` returns a `np.ndarray`. `"tf"`
-                returns a `tf.Tensor`. `"pt"` returns a `pt.Tensor`. `"jax"` returns a `jax.numpy.ndarray`.
+            return_tensors (`str`, *optional*):
+                The type of tensors to return. Can be one of:
+                    - `None`: Return a list of `np.ndarray`.
+                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. If `None`, the channel dimension format of the input
                 image is used. Can be one of:
