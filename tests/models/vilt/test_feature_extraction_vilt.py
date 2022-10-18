@@ -43,7 +43,7 @@ class ViltFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=30,
+        size={"shortest_edge": 30},
         size_divisor=2,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
@@ -78,18 +78,19 @@ class ViltFeatureExtractionTester(unittest.TestCase):
         assuming do_resize is set to True with a scalar size and size_divisor.
         """
         if not batched:
+            size = self.size["shortest_edge"]
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
             else:
                 h, w = image.shape[1], image.shape[2]
-            scale = self.size / min(w, h)
+            scale = size / min(w, h)
             if h < w:
-                newh, neww = self.size, scale * w
+                newh, neww = size, scale * w
             else:
-                newh, neww = scale * h, self.size
+                newh, neww = scale * h, size
 
-            max_size = int((1333 / 800) * self.size)
+            max_size = int((1333 / 800) * size)
             if max(newh, neww) > max_size:
                 scale = max_size / max(newh, neww)
                 newh = newh * scale

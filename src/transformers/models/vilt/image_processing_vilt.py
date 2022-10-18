@@ -14,14 +14,15 @@
 # limitations under the License.
 """Image processor class for Vilt."""
 
-from typing import Any, Iterable, List, Optional, Tuple, Union
+import warnings
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import PIL.Image
 
 from transformers.utils.generic import TensorType
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -47,14 +48,24 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-def pad_image(
+def pad(
     image: np.ndarray,
     output_size: Tuple[int, int],
     input_channel_dimension: Optional[ChannelDimension] = None,
     data_format: Optional[ChannelDimension] = None,
 ) -> np.ndarray:
     """
-    Pad the bottom and right of the image with zeros to make it up to the output size.
+    Pad the bottom and right of the image with zeros to the output size.
+
+    Args:
+        image (`np.ndarray`):
+            Image to pad.
+        output_size (`Tuple[int, int]`):
+            Output size of the image.
+        input_channel_dimension (`ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be inferred from the input image.
+        data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be the same as the input image.
     """
     if input_channel_dimension is None:
         input_channel_dimension = infer_channel_dimension_format(image)
@@ -78,13 +89,25 @@ def pad_image(
 
 
 def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarray:
+    """
+    Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
+
+    Args:
+        image (`np.ndarray`):
+            Image to make the pixel mask for.
+        output_size (`Tuple[int, int]`):
+            Output size of the mask.
+    """
     input_height, input_width = get_image_size(image)
     mask = np.zeros(output_size, dtype=np.int64)
     mask[:input_height, :input_width] = 1
     return mask
 
 
-def get_pad_size(images: List[np.ndarray]) -> List[int]:
+def get_max_dimensions(images: List[np.ndarray]) -> List[int]:
+    """
+    Get the maximum height and width across all images in a batch.
+    """
     input_channel_dimension = infer_channel_dimension_format(images[0])
 
     if input_channel_dimension == ChannelDimension.FIRST:
@@ -131,15 +154,16 @@ class ViltImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`int` *optional*, defaults to 384):
-            Set the class default for the `size` parameter. Resize the shorter side of the input to the given size.
-            Should be an integer. The longer side will be limited to under int((1333 / 800) * size) while preserving
-            the aspect ratio. Only has an effect if `do_resize` is set to `True`.
-        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+        size (`Dict[str, int]` *optional*, defaults to {"shortest_edge": 384}):
+            Set the class default for the `size` parameter. Resize the shorter side of the input to
+            `size["shortest_edge"]`. The longer side will be limited to under int((1333 / 800) *
+            `size["shortest_edge"]`) while preserving the aspect ratio. Only has an effect if `do_resize` is set to
+            `True`.
         size_divisor (`int`, *optional*, defaults to 32):
             Set the class default for `size_divisor`. The size by which to make sure both the height and width can be
             divided. Only has an effect if `do_resize` is set to `True`.
+        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
+            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
             specified scale `rescale_factor`.
@@ -162,9 +186,9 @@ class ViltImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: int = 384,
-        resample = PIL.Image.BICUBIC,
+        size: Dict[str, int] = None,
         size_divisor: int = 32,
+        resample=PIL.Image.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -177,6 +201,9 @@ class ViltImageProcessor(BaseImageProcessor):
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         super().__init__(**kwargs)
+        size = size if size is not None else {"shortest_edge": 384}
+        size = get_size_dict(size, default_to_square=False)
+
         self.do_resize = do_resize
         self.size = size
         self.size_divisor = size_divisor
@@ -191,7 +218,7 @@ class ViltImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: int,
+        size: Dict[str, int],
         size_divisor: int = 32,
         resample=PIL.Image.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -200,14 +227,15 @@ class ViltImageProcessor(BaseImageProcessor):
         """
         Resize an image.
 
-        If size is an int, then the image is resized to (size, size). If size is an iterable of length 2, then the
-        image is resized to (size[0], size[1]).
+        Resizes the shorter side of the image to `size["shortest_edge"]` while preserving the aspect ratio. If the
+        longer side is larger than the max size (int(`size["shortest_edge"]` * 1333 / 800)), the longer side is then
+        resized to the max size while preserving the aspect ratio.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`int` or `Iterable[int]`):
-                Size of the output image.
+            size (`Dict[str, int]`):
+                Controls the size of the output image. Should be of the form {"shortest_edge": int}.
             size_divisor (`int`):
                 The image is resized to a size that is a multiple of this value.
             resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BICUBIC`):
@@ -215,8 +243,10 @@ class ViltImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        longer = int(1333 / 800 * size)
-        output_size = get_resize_output_image_size(image, shorter=size, longer=longer, size_divisor=size_divisor)
+        size = get_size_dict(size, default_to_square=False)
+        shorter = size["shortest_edge"]
+        longer = int(1333 / 800 * shorter)
+        output_size = get_resize_output_image_size(image, shorter=shorter, longer=longer, size_divisor=size_divisor)
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def rescale(
@@ -262,57 +292,55 @@ class ViltImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
-    def pad_image(
+    def pad(
         self,
-        image: np.ndarray,
-        output_size: Tuple[int, int],
-        input_channel_dimension: Optional[ChannelDimension] = None,
-        data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
-        """
-        Pad the bottom and right of the image with zeros to the output size.
-
-        Args:
-            image (`np.ndarray`):
-                Image to pad.
-            output_size (`Tuple[int, int]`):
-                Output size of the image.
-            input_channel_dimension (`ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be inferred from the input image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return pad_image(
-            image, output_size=output_size, input_channel_dimension=input_channel_dimension, data_format=data_format
-        )
-
-    def make_pixel_mask(self, image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarray:
-        """
-        Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
-
-        Args:
-            image (`np.ndarray`):
-                Image to make the pixel mask for.
-            output_size (`Tuple[int, int]`):
-                Output size of the mask.
-        """
-        input_height, input_width = get_image_size(image)
-        mask = np.zeros(output_size, dtype=np.int64)
-        mask[:input_height, :input_width] = 1
-        return mask
-
-    def pad_and_create_pixel_mask(
-        self,
-        images: np.ndarray,
-        return_tensors: Optional[Union[str, TensorType]],
+        images: List[np.ndarray],
+        return_pixel_mask: bool = True,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
     ) -> BatchFeature:
         """
-        Pad the bottom and right of the image with zeros to the output size and return a pixel mask.
+        Pads a batch of images with zeros to the size of largest height and width in the batch and optionally returns
+        their corresponding pixel mask.
 
         Args:
-            image (`np.ndarray`):
-                Image to pad.
+            images (`List[np.ndarray]`):
+                Batch of images to pad.
+            return_pixel_mask (`bool`, *optional*, defaults to `False`):
+                Whether to return the pixel mask.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                        - `None`: Return a list of `np.ndarray`.
+                        - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                        - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                        - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                        - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the output image. If not provided, it will be the same as the input
+                image.
+        """
+        pad_size = get_max_dimensions(images)
+        padded_images = [pad(image=image, output_size=pad_size, data_format=data_format) for image in images]
+        data = {"pixel_values": padded_images}
+        if return_pixel_mask:
+            masks = [make_pixel_mask(image=image, output_size=pad_size) for image in images]
+            data["pixel_mask"] = masks
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def pad_and_create_pixel_mask(
+        self,
+        pixel_values_list: List[ImageInput],
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = None,
+    ) -> BatchFeature:
+        """
+        Pads a batch of images with zeros to the size of largest height and width in the batch and returns their
+        corresponding pixel mask.
+
+        Args:
+            images (`List[np.ndarray]`):
+                Batch of images to pad.
             return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
@@ -323,26 +351,23 @@ class ViltImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        FutureWarning(
-            "This method is deprecated and will be removed in a future release. Use pad_image and make_pixel_mask"
-            " instead."
+        warnings.warn(
+            "This method is deprecated and will be removed in v4.26.0. Please use pad instead.", FutureWarning
         )
-        pad_size = get_pad_size(images)
-        padded_images = [
-            self.pad_image(image=image, output_size=pad_size, data_format=data_format) for image in images
-        ]
-        masks = [self.make_pixel_mask(image=image, output_size=pad_size) for image in images]
-
-        data = {"pixel_values": padded_images, "pixel_mask": masks}
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-
-        return encoded_inputs
+        # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
+        images = [to_numpy_array(image) for image in pixel_values_list]
+        return self.pad(
+            images=images,
+            return_pixel_mask=True,
+            return_tensors=return_tensors,
+            data_format=data_format,
+        )
 
     def preprocess(
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[int] = None,
+        size: Optional[Dict[str, int]] = None,
         size_divisor: Optional[int] = None,
         resample=None,
         do_rescale: Optional[bool] = None,
@@ -362,8 +387,10 @@ class ViltImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`int`, *optional*, defaults to `self.size`):
-                Size of the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Controls the size of the image after `resize`. The shortest edge of the image is resized to
+                `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
+                is > `int(size["shortest_edge"] * (1333 / )
             size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
                 The image is resized to a size that is a multiple of this value.
             resample (`int`, *optional*, defaults to `self.resample`):
@@ -394,7 +421,6 @@ class ViltImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -404,10 +430,13 @@ class ViltImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
 
-        if not is_batched(images):  # FIXME - use tree.is_nested
+        size = size if size is not None else self.size
+        size = get_size_dict(size, default_to_square=False)
+
+        if not is_batched(images):
             images = [images]
 
-        if not valid_images(images):  # FIXME - make check in preprocess_img
+        if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -439,13 +468,8 @@ class ViltImageProcessor(BaseImageProcessor):
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
         if do_pad:
-            pad_size = get_pad_size(images)
-            padded_images = [
-                self.pad_image(image=image, output_size=pad_size, data_format=data_format) for image in images
-            ]
-            masks = [self.make_pixel_mask(image=image, output_size=pad_size) for image in images]
-            data = {"pixel_values": padded_images, "pixel_mask": masks}
+            encoded_outputs = self.pad(images, return_pixel_mask=True, return_tensors=return_tensors)
         else:
-            data = {"pixel_data": images}
+            encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return encoded_outputs
