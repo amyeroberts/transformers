@@ -14,15 +14,15 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
-from typing import Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 import PIL.Image
 
 from transformers.utils.generic import TensorType
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import get_resize_output_image_size, normalize, rescale, resize, to_channel_dimension_format
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -46,22 +46,23 @@ class ViTImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
+        size (`dict`, *optional*, defaults to {"height": 224, "width": 224}):
+            Set the class default for the `size` parameter. Controls the size of the output image.
+        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
+            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
             specified scale `rescale_factor`.
-        do_normalize:
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
-        size (`int` *optional*, defaults to 224):
-            Set the class default for the `size` parameter. Size of the image.
-        resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+        do_normalize:
+            Set the class default for `do_normalize`. Controls whether to normalize the image.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Set the class default for `image_mean`. This is a float or list of floats of length of the number of
-            channels for
+            Set the class default for `image_mean`. This is a float or list of floats the length of the number of
+            channels in the image. Defines the mean to use if normalizing the image.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Image standard deviation.
+            Set the class default for `image_std`. This is a float or list of floats the length of the number of
+            channels in the image. Defines the standard deviation to use if normalizing the image.
     """
 
     model_input_names = ["pixel_values"]
@@ -69,15 +70,18 @@ class ViTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
+        size: Optional[Dict[str, int]] = None,
+        resample=PIL.Image.BILINEAR,
         do_rescale: bool = True,
-        do_normalize: bool = True,
-        size: int = 224,
-        resample: PIL.Image.Resampling = PIL.Image.Resampling.BILINEAR,
         rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         **kwargs
     ) -> None:
+        # For backwards compatibility with the old `size` parameter.
+        size = 224 if size is None else size
+        size = get_size_dict(size)
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.do_rescale = do_rescale
@@ -91,8 +95,8 @@ class ViTImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Union[int, Iterable[int]],
-        resample: PIL.Image.Resampling = PIL.Image.BILINEAR,
+        size: Dict[str, int],
+        resample=PIL.Image.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
@@ -105,33 +109,43 @@ class ViTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`int` or `Iterable[int]`):
-                Size of the output image.
-            resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.BILINEAR`):
-                Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+            size (`dict`):
+                Dictionary in the format {"height": int, "width": int} specifying the size of the output image.
+            resample:
+                `PIL.Image` resampling filter to use when resizing the image e.g. `PIL.Image.BILINEAR`.
+            data_format (`ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If `None`, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
         """
-        output_size = get_resize_output_image_size(image, size=size)
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        size = get_size_dict(size)
+        return resize(
+            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
+        )
 
     def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ):
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+    ) -> np.ndarray:
         """
         Rescale an image by a scale factor. image = image * scale.
 
         Args:
             image (`np.ndarray`):
                 Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If `None`, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
@@ -150,28 +164,34 @@ class ViTImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to normalize.
             image_mean (`float` or `List[float]`):
-                Image mean.
+                Image mean to use for normalization.
             image_std (`float` or `List[float]`):
-                Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                Image standard deviation to use for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If `None`, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        do_rescale: bool = None,
-        do_normalize: bool = None,
-        resample: PIL.Image.Resampling = None,
-        size: int = None,
-        rescale_factor: float = None,
+        do_resize: Optional[bool] = None,
+        size: Dict[str, int] = None,
+        resample=None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-    ) -> PIL.Image.Image:
+        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+    ):
         """
         Preprocess an image or batch of images.
 
@@ -180,20 +200,22 @@ class ViTImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PIL.Image.Resampling`,
-                Only has an effect if `do_resize` is set to `True`.
-            size (`int`, *optional*, defaults to `self.size`):
-                Size of the image.
+            size (`dict`, *optional*, defaults to `self.size`):
+                Dictionary in the format {"height": int, "width": int} specifying the size of the output image.
+            resample (`PIL.Image` resampling filter, *optional*, defaults to `self.resample`):
+                `PIL.Image` resampling filter to use if resizing the image e.g. `PIL.Image.BILINEAR`. Only has an
+                effect if `do_resize` is set to `True`.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean.
+                Image mean to use if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation.
-            return_tensors (`str`, *optional*, defaults to `None`):
+                Image standard deviation to use if `do_normalize` is set to `True`.
+            return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
@@ -202,17 +224,19 @@ class ViTImageProcessor(BaseImageProcessor):
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         resample = resample if resample is not None else self.resample
-        size = size if size is not None else self.size
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+
+        size = size if size is not None else self.size
+        size_dict = get_size_dict(size)
 
         if not is_batched(images):
             images = [images]
@@ -233,7 +257,7 @@ class ViTImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if do_resize:
-            images = [self.resize(image=image, size=size, resample=resample) for image in images]
+            images = [self.resize(image=image, size=size_dict, resample=resample) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
