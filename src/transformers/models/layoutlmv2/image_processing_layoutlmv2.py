@@ -17,7 +17,7 @@
 from typing import Dict, Optional, Union
 
 import numpy as np
-import PIL.Image
+import PIL
 
 from transformers.utils.generic import TensorType
 
@@ -25,6 +25,7 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size
 from ...image_transforms import resize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     ChannelDimension,
+    PILImageResampling,
     ImageInput,
     infer_channel_dimension_format,
     is_batched,
@@ -108,7 +109,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             dimensions to the specified `size`.
         size (`Dict[str, int]` *optional*, defaults to {"height": 224, "width": 224}):
             Set the class default for the `size` parameter. Size of the image after resizing.
-        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         apply_ocr (`bool`, *optional*, defaults to `True`):
             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
@@ -126,7 +127,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        resample=PIL.Image.BILINEAR,
+        resample = PILImageResampling.BILINEAR,
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = "",
@@ -147,7 +148,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample=PIL.Image.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
@@ -159,7 +160,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Size of the output image.
-            resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.

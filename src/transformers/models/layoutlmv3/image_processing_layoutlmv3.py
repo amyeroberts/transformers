@@ -17,7 +17,7 @@
 from typing import Dict, Iterable, Optional, Union
 
 import numpy as np
-import PIL.Image
+import PIL
 
 from transformers.utils.generic import TensorType
 
@@ -27,6 +27,7 @@ from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
+    PILImageResampling,
     ImageInput,
     infer_channel_dimension_format,
     is_batched,
@@ -109,7 +110,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
             dimensions to the specified `size`.
         size (`Dict[str, int]` *optional*, defaults to {"height": 224, "width": 224}):
             Set the class default for the `size` parameter. Controls the size of the image after resizing.
-        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_rescale` parameter. Controls whether to rescale the image's pixel values
@@ -140,7 +141,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        resample=PIL.Image.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_value: float = 1 / 255,
         do_normalize: bool = True,
@@ -171,7 +172,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample=PIL.Image.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
@@ -183,7 +184,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Size of the output image.
-            resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -263,7 +264,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Desired size of the output image after applying `resize`.
             resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the `PIL.Image` resampling filters. Only has an effect if `do_resize` is set to `True`.
+                Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` filters. Only has an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image pixel values between [0, 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
