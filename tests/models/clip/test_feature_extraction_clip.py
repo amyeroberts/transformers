@@ -43,7 +43,7 @@ class CLIPFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=20,
+        size=None,
         do_center_crop=True,
         crop_size=18,
         do_normalize=True,
@@ -51,6 +51,7 @@ class CLIPFeatureExtractionTester(unittest.TestCase):
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
+        size = size if size is not None else {"shortest_edge": 20}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
