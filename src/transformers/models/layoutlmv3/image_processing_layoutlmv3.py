@@ -14,22 +14,15 @@
 # limitations under the License.
 """Image processor class for LayoutLMv3."""
 
-from typing import Iterable, Optional, Union
+from typing import Dict, Iterable, Optional, Union
 
 import numpy as np
 import PIL.Image
 
 from transformers.utils.generic import TensorType
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import (
-    get_resize_output_image_size,
-    normalize,
-    rescale,
-    resize,
-    to_channel_dimension_format,
-    to_pil_image,
-)
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -114,9 +107,9 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`int` *optional*, defaults to 224):
-            Set the class default for the `size` parameter. Size of the image.
-        resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+        size (`Dict[str, int]` *optional*, defaults to {"height": 224, "width": 224}):
+            Set the class default for the `size` parameter. Controls the size of the image after resizing.
+        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_rescale` parameter. Controls whether to rescale the image's pixel values
@@ -146,8 +139,8 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: int = 224,
-        resample: PIL.Image.Resampling = PIL.Image.Resampling.BILINEAR,
+        size: Dict[str, int] = None,
+        resample=PIL.Image.BILINEAR,
         do_rescale: bool = True,
         rescale_value: float = 1 / 255,
         do_normalize: bool = True,
@@ -159,6 +152,9 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
+        size = size if size is not None else {"height": 224, "width": 224}
+        size = get_size_dict(size)
+
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
@@ -174,28 +170,26 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Union[int, Iterable[int]],
-        resample: PIL.Image.Resampling = PIL.Image.BILINEAR,
+        size: Dict[str, int],
+        resample=PIL.Image.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
         """
-        Resize an image.
-
-        If size is an int, then the image is resized to (size, size). If size is an iterable of length 2, then the
-        image is resized to (size[0], size[1]).
+        Resize an image to (size["height"], size["width"]) dimensions.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`int` or `Iterable[int]`):
+            size (`Dict[str, int]`):
                 Size of the output image.
-            resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.BILINEAR`):
+            resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        output_size = get_resize_output_image_size(image, size=size)
+        size = get_size_dict(size)
+        output_size = (size["height"], size["width"])
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def rescale(
@@ -245,8 +239,8 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: bool = None,
-        size: int = None,
-        resample: PIL.Image.Resampling = None,
+        size: Dict[str, int] = None,
+        resample=None,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
@@ -266,11 +260,10 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`int`, *optional*, defaults to `self.size`):
-                Desired size of the output image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Desired size of the output image after applying `resize`.
             resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PIL.Image.Resampling`,
-                Only has an effect if `do_resize` is set to `True`.
+                Resampling filter to use if resizing the image. This can be one of the `PIL.Image` resampling filters. Only has an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image pixel values between [0, 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -303,7 +296,6 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
@@ -313,6 +305,9 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         apply_ocr = apply_ocr if apply_ocr is not None else self.apply_ocr
         ocr_lang = ocr_lang if ocr_lang is not None else self.ocr_lang
         tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
+
+        size = size if size is not None else self.size
+        size = get_size_dict(size)
 
         if not is_batched(images):
             images = [images]
