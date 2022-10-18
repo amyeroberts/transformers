@@ -36,7 +36,7 @@ There are 4 ways you can contribute to transformers:
 * Contributing to the examples or to the documentation;
 * Submitting issues related to bugs or desired new features.
 
-In particular there is a special [Good First
+In particular, there is a special [Good First
 Issue](https://github.com/huggingface/transformers/contribute) listing. It will give you a list of
 open Issues that are open to anybody to work on. Just comment in the issue that you'd like to work
 on it. In that same listing you will also find some Issues with `Good Second Issue` label. These are
@@ -171,6 +171,14 @@ Follow these steps to start contributing ([supported Python versions](https://gi
 
    If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `datasets`
    library.
+   
+   Depending on your OS, you might need to install some external libraries, as well, if the `pip` installation fails.
+   
+   For macOS, you will likely need [MeCab](https://taku910.github.io/mecab/), which can be installed from Homebrew:
+   
+   ```bash
+   brew install mecab
+   ```
 
 5. Develop the features on your branch.
 

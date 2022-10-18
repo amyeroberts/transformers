@@ -22,8 +22,6 @@ from functools import partial
 from pickle import UnpicklingError
 from typing import Any, Dict, Set, Tuple, Union
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -47,8 +45,10 @@ from .utils import (
     add_start_docstrings_to_model_forward,
     cached_file,
     copy_func,
+    download_url,
     has_file,
     is_offline_mode,
+    is_remote_url,
     logging,
     replace_return_docstrings,
 )
@@ -80,9 +80,9 @@ def dtype_byte_size(dtype):
     4
     ```
     """
-    if dtype == np.bool:
+    if dtype == bool:
         return 1 / 8
-    bit_search = re.search("[^\d](\d+)$", dtype.name)
+    bit_search = re.search(r"[^\d](\d+)$", dtype.name)
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
     bit_size = int(bit_search.groups()[0])
@@ -303,10 +303,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             return param
 
         if mask is None:
-            return jax.tree_map(conditional_cast, params)
+            return jax.tree_util.tree_map(conditional_cast, params)
 
         flat_params = flatten_dict(params)
-        flat_mask, _ = jax.tree_flatten(mask)
+        flat_mask, _ = jax.tree_util.tree_flatten(mask)
 
         for masked, key in zip(flat_mask, flat_params.keys()):
             if masked:
@@ -663,7 +663,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)
                     is_sharded = True
                 # At this stage we don't have a weight file so we will raise an error.
-                elif os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME):
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     raise EnvironmentError(
                         f"Error no file named {FLAX_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
@@ -677,6 +677,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             elif os.path.isfile(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
                 is_local = True
+            elif is_remote_url(pretrained_model_name_or_path):
+                filename = pretrained_model_name_or_path
+                resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
                 filename = WEIGHTS_NAME if from_pt else FLAX_WEIGHTS_NAME
                 try:
@@ -900,7 +903,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             )
 
         # dictionary of key: dtypes for the model params
-        param_dtypes = jax.tree_map(lambda x: x.dtype, state)
+        param_dtypes = jax.tree_util.tree_map(lambda x: x.dtype, state)
         # extract keys of parameters not in jnp.float32
         fp16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.float16]
         bf16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.bfloat16]

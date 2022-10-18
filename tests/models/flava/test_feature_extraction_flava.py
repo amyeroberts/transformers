@@ -31,6 +31,7 @@ if is_vision_available():
     import PIL
 
     from transformers import FlavaFeatureExtractor
+    from transformers.image_utils import PILImageResampling
     from transformers.models.flava.feature_extraction_flava import (
         FLAVA_CODEBOOK_MEAN,
         FLAVA_CODEBOOK_STD,
