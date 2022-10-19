@@ -12,14 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for PoolFormer."""
+"""Image processor class for LeViT."""
 
-import math
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
-from transformers import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -32,8 +30,8 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -44,45 +42,40 @@ from ...image_utils import (
 from ...utils import logging
 
 
-if is_vision_available():
-    import PIL
-
-
 logger = logging.get_logger(__name__)
 
 
-class PoolFormerImageProcessor(BaseImageProcessor):
+class LevitImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a PoolFormer image processor.
+    Constructs a LeViT image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 256}`):
-            Set the class default for the `size` parameter. Controls the size of the image after resizing.
-        crop_pct (`float`, *optional*, defaults to `0.9`):
-            Set the class default for the `crop_pct` parameter. The percentage of the image to crop from the center.
-            Only has an effect if `do_resize` is set to `True`.
+            Set the class default for the `do_resize` parameter. Controls whether to resize the shortest edge of the
+            input to int(256/224 *`size`).
+        size (`Dict[str, int]`, *optional*, defaults to `{"shortest_edge": 224}`):
+            Set the class default for the `size` parameter. Controls the size of the output image after resizing. If
+            size is a dict with keys "width" and "height", the image will be resized to `(size["height"],
+            size["width"])`. If size is a dict with key "shortest_edge", the shortest edge value `c` is rescaled to
+            `int(c * (256/224))`. The smaller edge of the image will be matched to this value i.e, if height > width,
+            then image will be rescaled to `(size["shortest_egde"] * height / width, size["shortest_egde"])`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Set the class default for the `resample` parameter. Controls the interpolation method used when resizing.
         do_center_crop (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_center_crop`. Controls whether to center crop the image. If the input size is
-            smaller than `crop_size` along any edge, the image is padded with 0's and then center cropped.
-        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
-            Set the class default for `crop_size`. Size of the image after applying center crop.
+            Whether or not to center crop the input to `size`.
+        crop_size (`Dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
+            Desired image size after `center_crop`.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
             specified scale `rescale_factor`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Set the class default for `image_mean`. This is a float or list of floats of length of the number of
-            channels for
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Image standard deviation.
+            Whether or not to normalize the input with mean and standard deviation.
+        image_mean (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
+            The sequence of means for each channel, to be used when normalizing images.
+        image_std (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
+            The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
     model_input_names = ["pixel_values"]
@@ -91,40 +84,37 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        crop_pct: int = 0.9,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
-        rescale_factor: Union[int, float] = 1 / 255,
         do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, Iterable[float]]] = IMAGENET_DEFAULT_MEAN,
+        image_std: Optional[Union[float, Iterable[float]]] = IMAGENET_DEFAULT_STD,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 256}
+        size = size if size is not None else {"shortest_edge": 224}
         size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 256, "width": 256}
+        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         crop_size = get_size_dict(crop_size)
 
         self.do_resize = do_resize
         self.size = size
-        self.crop_pct = crop_pct
         self.resample = resample
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
     def resize(
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        crop_pct: Optional[float] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
@@ -132,56 +122,35 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         """
         Resize an image.
 
-        If crop_pct is unset:
-            - size is `{"height": h, "width": w}`: the image is resized to `(h, w)`.
-            - size is `{"shortest_edge": s}`: the shortest edge of the image is resized to s whilst maintaining the
-              aspect ratio.
+        If size is a dict with keys "width" and "height", the image will be resized to `(size["height"],
+        size["width"])`.
 
-        if crop_pct is set:
-            - size is `{"height": h, "width": w}`: the image is resized to `(int(floor(h/crop_pct)),
-              int(floor(w/crop_pct)))`
-            - size is `{"height": c, "width": c}`: the shortest edge of the image is resized to `int(floor(c/crop_pct)`
-              whilst maintaining the aspect ratio.
-            - size is `{"shortest_edge": c}`: the shortest edge of the image is resized to `int(floor(c/crop_pct)`
-              whilst maintaining the aspect ratio.
+        If size is a dict with key "shortest_edge", the shortest edge value `c` is rescaled to `int(c * (256/224))`.
+        The smaller edge of the image will be matched to this value i.e, if height > width, then image will be rescaled
+        to `(size["shortest_egde"] * height / width, size["shortest_egde"])`.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Size of the output image.
-            crop_pct (`float`, *optional*):
-                Percentage of the image that will be cropped from the center. If set, the image is resized
+                Size of the output image after resizing. If size is a dict with keys "width" and "height", the image
+                will be resized to (height, width). If size is a dict with key "shortest_edge", the shortest edge value
+                `c` is rescaled to int(`c` * (256/224)). The smaller edge of the image will be matched to this value
+                i.e, if height > width, then image will be rescaled to (size * height / width, size).
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resizing the image.
+                Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        size = get_size_dict(size, default_to_square=False)
-        if crop_pct is not None:
-            if "shortest_edge" in size:
-                scale_size = int(math.floor(size["shortest_edge"] / crop_pct))
-            elif "height" in size and "width" in size:
-                if size["height"] == size["width"]:
-                    scale_size = int(math.floor(size["height"] / crop_pct))
-                else:
-                    scale_size = (
-                        int(math.floor(size["height"] / crop_pct)),
-                        int(math.floor(size["width"] / crop_pct)),
-                    )
-            else:
-                raise ValueError("Invalid size for resize: {}".format(size))
-
-            output_size = get_resize_output_image_size(image, size=scale_size, default_to_square=False)
-        else:
-            if "shortest_edge" in size:
-                output_size = get_resize_output_image_size(image, size=size["shortest_edge"], default_to_square=False)
-            elif "height" in size and "width" in size:
-                output_size = (size["height"], size["width"])
-            else:
-                raise ValueError("Invalid size for resize: {}".format(size))
-
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        size_dict = get_size_dict(size, default_to_square=False)
+        # size_dict is a dict with either keys "height" and "width" or "shortest_edge"
+        if "shortest_edge" in size:
+            shortest_edge = int((256 / 224) * size["shortest_edge"])
+            output_size = get_resize_output_image_size(image, size=shortest_edge, default_to_square=False)
+            size_dict = {"height": output_size[0], "width": output_size[1]}
+        return resize(
+            image, size=(size_dict["height"], size_dict["width"]), resample=resample, data_format=data_format, **kwargs
+        )
 
     def center_crop(
         self,
@@ -191,14 +160,13 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Center crop an image to (size["height"], size["width"]). If the input size is smaller than `crop_size` along
-        any edge, the image is padded with 0's and then center cropped.
+        Center crop an image.
 
         Args:
             image (`np.ndarray`):
                 Image to center crop.
             size (`Dict[str, int]`):
-                Size of the output image.
+                Dict `{"height": int, "width": int}` specifying the size of the output image after cropping.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
@@ -211,7 +179,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
-    ):
+    ) -> np.ndarray:
         """
         Rescale an image by a scale factor. image = image * scale.
 
@@ -239,9 +207,9 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            image_mean (`float` or `List[float]`):
+            mean (`float` or `List[float]`):
                 Image mean.
-            image_std (`float` or `List[float]`):
+            std (`float` or `List[float]`):
                 Image standard deviation.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -251,49 +219,49 @@ class PoolFormerImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        crop_pct: int = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[Dict[str, int]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, Iterable[float]]] = None,
+        image_std: Optional[Union[float, Iterable[float]]] = None,
+        return_tensors: Optional[TensorType] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-    ) -> PIL.Image.Image:
+    ) -> BatchFeature:
         """
-        Preprocess an image or batch of images.
+        Preprocess an image or batch of images to be used as input to a LeViT model.
 
         Args:
             images (`ImageInput`):
-                Image to preprocess.
+                Image or batch of images to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after applying resize.
-            crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
-                Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
-                has an effect if `do_resize` is set to `True`.
+                Size of the output image after resizing. If size is a dict with keys "width" and "height", the image
+                will be resized to (height, width). If size is a dict with key "shortest_edge", the shortest edge value
+                `c` is rescaled to int(`c` * (256/224)). The smaller edge of the image will be matched to this value
+                i.e, if height > width, then image will be rescaled to (size * height / width, size).
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                Resampling filter to use when resiizing the image.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image.
             crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the image after applying center crop.
+                Size of the output image after center cropping. Crops images to (crop_size["height"],
+                crop_size["width"]).
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
+                Whether to rescale the image pixel values by `rescaling_factor` - typical to values between 0 and 1.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+                Factor to rescale the image pixel values by.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
+                Whether to normalize the image pixel values by `image_mean` and `image_std`.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean.
+                Mean to normalize the image pixel values by.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation.
+                Standard deviation to normalize the image pixel values by.
             return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -301,13 +269,13 @@ class PoolFormerImageProcessor(BaseImageProcessor):
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            data_format (`str` or `ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
-        crop_pct = crop_pct if crop_pct is not None else self.crop_pct
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -330,11 +298,11 @@ class PoolFormerImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
+        if do_resize and size is None:
+            raise ValueError("Size must be specified if do_resize is True.")
 
-        if do_center_crop and crop_pct is None:
-            raise ValueError("Crop_pct must be specified if do_center_crop is True.")
+        if do_center_crop and crop_size is None:
+            raise ValueError("Crop size must be specified if do_center_crop is True.")
 
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
@@ -346,16 +314,16 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if do_resize:
-            images = [self.resize(image=image, size=size, crop_pct=crop_pct, resample=resample) for image in images]
+            images = [self.resize(image, size, resample) for image in images]
 
         if do_center_crop:
-            images = [self.center_crop(image=image, size=crop_size) for image in images]
+            images = [self.center_crop(image, crop_size) for image in images]
 
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+            images = [self.rescale(image, rescale_factor) for image in images]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+            images = [self.normalize(image, image_mean, image_std) for image in images]
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
 

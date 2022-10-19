@@ -136,10 +136,10 @@ def to_pil_image(
     elif not isinstance(image, np.ndarray):
         raise ValueError("Input image type not supported: {}".format(type(image)))
 
-    # If the channel as been moved to first dim, we put it back at the end.
+    # Make sure channel dimension is last for conversion
     image = to_channel_dimension_format(image, ChannelDimension.LAST)
 
-    # If there is a single channel, we squeeze it, as otherwise PIL can't handle it.
+    # If the image has a single channel axis, we need to remove it before converting to PIL.Image
     image = np.squeeze(image, axis=-1) if image.shape[-1] == 1 else image
 
     # PIL.Image can only store uint8 values, so we rescale the image to be between 0 and 255 if needed.
@@ -262,8 +262,7 @@ def resize(
 
     if return_numpy:
         resized_image = np.array(resized_image)
-        # If the input image channel dimension was of size 1, then it is dropped when converting to a PIL image
-        # so we need to add it back if necessary.
+        # Add back channel dimension lost in PIL.Image conversion if input is grayscale
         resized_image = np.expand_dims(resized_image, axis=-1) if resized_image.ndim == 2 else resized_image
         resized_image = to_channel_dimension_format(resized_image, data_format)
     return resized_image
