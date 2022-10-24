@@ -37,8 +37,10 @@ if is_vision_available():
     from transformers.image_transforms import (
         center_crop,
         get_resize_output_image_size,
+        make_thumbnail,
         normalize,
         resize,
+        rotate,
         to_channel_dimension_format,
         to_pil_image,
     )
@@ -178,6 +180,11 @@ class ImageTransformsTester(unittest.TestCase):
     def test_normalize(self):
         image = np.random.randint(0, 256, (224, 224, 3)) / 255
 
+        # Test that exception is raised if inputs are incorrect
+        # Not a numpy array image
+        with self.assertRaises(ValueError):
+            normalize(5, 5, 5)
+
         # Number of mean values != number of channels
         with self.assertRaises(ValueError):
             normalize(image, mean=(0.5, 0.6), std=1)
@@ -204,7 +211,7 @@ class ImageTransformsTester(unittest.TestCase):
         with self.assertRaises(ValueError):
             center_crop(image, 10)
 
-        # Test result is correct - output data format is channels_first and center crop
+        # Test result is correct - output data format is channels_last and center crop
         # correctly computed
         expected_image = image[:, 52:172, 82:142].transpose(1, 2, 0)
         cropped_image = center_crop(image, (120, 60), data_format="channels_last")
@@ -219,3 +226,29 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertIsInstance(cropped_image, np.ndarray)
         self.assertEqual(cropped_image.shape, (300, 260, 3))
         self.assertTrue(np.allclose(cropped_image, expected_image))
+
+    def test_rotate(self):
+        image = np.random.randint(0, 256, (3, 224, 224))
+
+        # Test result is correct - output data format is channels_last and rotate
+        # correctly computed
+        expected_image = np.rot90(image, axes=(1, 2)).transpose(1, 2, 0)
+        rotated_image = rotate(image, 90, data_format="channels_last")
+        self.assertIsInstance(rotated_image, np.ndarray)
+        self.assertEqual(rotated_image.shape, (224, 224, 3))
+        self.assertTrue(np.allclose(rotated_image, expected_image))
+
+        rotated_image = rotate(image, 360)
+        self.assertIsInstance(rotated_image, np.ndarray)
+        self.assertEqual(rotated_image.shape, (3, 224, 224))
+        self.assertTrue(np.allclose(rotated_image, image))
+
+    def test_make_thumbnail(self):
+        height, width = 120, 160
+        image = np.random.randint(0, 256, (3, height, width))
+
+        # Test that the returned image is of the expected size, that the aspect ratio is
+        # preserved, the input image is not modified and is in the channels_last format
+        thumbnail = make_thumbnail(image, (100, 100), data_format="channels_last")
+        self.assertIsInstance(thumbnail, np.ndarray)
+        self.assertEqual(thumbnail.shape, (75, 100, 3))
