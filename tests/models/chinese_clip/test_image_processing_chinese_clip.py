@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 HuggingFace Inc.
+# Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
+from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
 if is_torch_available():
@@ -30,10 +30,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import OwlViTFeatureExtractor
+    from transformers import ChineseCLIPFeatureExtractor
 
 
-class OwlViTFeatureExtractionTester(unittest.TestCase):
+class ChineseCLIPImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -51,6 +51,8 @@ class OwlViTFeatureExtractionTester(unittest.TestCase):
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
+        size = size if size is not None else {"height": 224, "width": 224}
+        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -58,9 +60,9 @@ class OwlViTFeatureExtractionTester(unittest.TestCase):
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.size = size if size is not None else {"height": 18, "width": 18}
+        self.size = size
         self.do_center_crop = do_center_crop
-        self.crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
+        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -78,15 +80,45 @@ class OwlViTFeatureExtractionTester(unittest.TestCase):
             "do_convert_rgb": self.do_convert_rgb,
         }
 
+    def prepare_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
+        """
+
+        assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+
+        if equal_resolution:
+            image_inputs = []
+            for i in range(self.batch_size):
+                image_inputs.append(
+                    np.random.randint(
+                        255, size=(self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
+                    )
+                )
+        else:
+            image_inputs = []
+            for i in range(self.batch_size):
+                width, height = np.random.choice(np.arange(self.min_resolution, self.max_resolution), 2)
+                image_inputs.append(np.random.randint(255, size=(self.num_channels, width, height), dtype=np.uint8))
+
+        if not numpify and not torchify:
+            # PIL expects the channel dimension as last dimension
+            image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+
+        if torchify:
+            image_inputs = [torch.from_numpy(x) for x in image_inputs]
+
+        return image_inputs
+
 
 @require_torch
 @require_vision
-class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ChineseCLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = OwlViTFeatureExtractor if is_vision_available() else None
+    feature_extraction_class = ChineseCLIPFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = OwlViTFeatureExtractionTester(self)
+        self.feature_extract_tester = ChineseCLIPImageProcessingTester(self, do_center_crop=True)
 
     @property
     def feat_extract_dict(self):
@@ -103,12 +135,14 @@ class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Tes
         self.assertTrue(hasattr(feature_extractor, "image_std"))
         self.assertTrue(hasattr(feature_extractor, "do_convert_rgb"))
 
+    def test_batch_feature(self):
+        pass
+
     def test_call_pil(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PIL images
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
-
+        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -140,7 +174,7 @@ class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Tes
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random numpy tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
+        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -172,7 +206,7 @@ class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Tes
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
+        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
@@ -195,6 +229,67 @@ class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Tes
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
+            ),
+        )
+
+
+@require_torch
+@require_vision
+class ChineseCLIPFeatureExtractionTestFourChannels(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
+    feature_extraction_class = ChineseCLIPFeatureExtractor if is_vision_available() else None
+
+    def setUp(self):
+        self.feature_extract_tester = ChineseCLIPImageProcessingTester(self, num_channels=4, do_center_crop=True)
+        self.expected_encoded_image_num_channels = 3
+
+    @property
+    def feat_extract_dict(self):
+        return self.feature_extract_tester.prepare_feat_extract_dict()
+
+    def test_feat_extract_properties(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        self.assertTrue(hasattr(feature_extractor, "do_resize"))
+        self.assertTrue(hasattr(feature_extractor, "size"))
+        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
+        self.assertTrue(hasattr(feature_extractor, "center_crop"))
+        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
+        self.assertTrue(hasattr(feature_extractor, "image_mean"))
+        self.assertTrue(hasattr(feature_extractor, "image_std"))
+        self.assertTrue(hasattr(feature_extractor, "do_convert_rgb"))
+
+    def test_batch_feature(self):
+        pass
+
+    def test_call_pil_four_channels(self):
+        # Initialize feature_extractor
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        # create random PIL images
+        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False)
+        for image in image_inputs:
+            self.assertIsInstance(image, Image.Image)
+
+        # Test not batched input
+        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                1,
+                self.expected_encoded_image_num_channels,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
+            ),
+        )
+
+        # Test batched
+        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.expected_encoded_image_num_channels,
                 self.feature_extract_tester.crop_size["height"],
                 self.feature_extract_tester.crop_size["width"],
             ),
