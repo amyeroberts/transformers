@@ -31,6 +31,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         # Base model mapping
         ("albert", "TFAlbertModel"),
         ("bart", "TFBartModel"),
+        ("beit", "TFBeitModel"),
         ("bert", "TFBertModel"),
         ("blenderbot", "TFBlenderbotModel"),
         ("blenderbot-small", "TFBlenderbotSmallModel"),
@@ -186,6 +187,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     [
+        ("beit", "TFBeitForMaskedImageModeling"),
         ("deit", "TFDeiTForMaskedImageModeling"),
         ("swin", "TFSwinForMaskedImageModeling"),
     ]
@@ -194,6 +196,7 @@ TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
+        ("beit", "TFBeitForImageClassification"),
         ("convnext", "TFConvNextForImageClassification"),
         ("cvt", "TFCvtForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
@@ -210,6 +213,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Semantic Segmentation mapping
+        ("beit", "TFBeitForSemanticSegmentation"),
         ("data2vec-vision", "TFData2VecVisionForSemanticSegmentation"),
         ("mobilevit", "TFMobileViTForSemanticSegmentation"),
         ("segformer", "TFSegformerForSemanticSegmentation"),
