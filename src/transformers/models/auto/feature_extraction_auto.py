@@ -16,6 +16,7 @@
 import importlib
 import json
 import os
+import warnings
 from collections import OrderedDict
 from typing import Dict, Optional, Union
 
@@ -320,6 +321,22 @@ class AutoFeatureExtractor:
             feature_extractor_class = getattr(config, "feature_extractor_type", None)
             if hasattr(config, "auto_map") and "AutoFeatureExtractor" in config.auto_map:
                 feature_extractor_auto_map = config.auto_map["AutoFeatureExtractor"]
+
+        # If we still don't have the feature extractor class, it might be a vision model with an image processor
+        # and no feature extractor. This is for forwards compatibility until vision feature extractors are fully
+        # deprecated.
+        if feature_extractor_class is None and feature_extractor_auto_map is None:
+            if not isinstance(config, PretrainedConfig):
+                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            feature_extractor_class = config_dict.get("image_processor_type", None)
+            if "AutoImageProcessor" in config_dict.get("auto_map", {}):
+                feature_extractor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
+            if feature_extractor_class is not None:
+                warnings.warn(
+                    "Feature extractors for vision models are deprecated and will be removed in v5. Please load an image "
+                    "processor instead using AutoImageProcessor.",
+                    FutureWarning,
+                )
 
         if feature_extractor_class is not None:
             # If we have custom code for a feature extractor, we get the proper class.
