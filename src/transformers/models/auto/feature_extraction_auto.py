@@ -333,8 +333,8 @@ class AutoFeatureExtractor:
                 feature_extractor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
             if feature_extractor_class is not None:
                 warnings.warn(
-                    "Feature extractors for vision models are deprecated and will be removed in v5. Please load an image "
-                    "processor instead using AutoImageProcessor.",
+                    "Feature extractors for vision models are deprecated and will be removed in v5. Please load an"
+                    " image processor instead using AutoImageProcessor.",
                     FutureWarning,
                 )
 

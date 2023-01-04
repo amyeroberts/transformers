@@ -24,6 +24,7 @@ from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
+    BitImageProcessor,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
 )
@@ -121,3 +122,10 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del CONFIG_MAPPING._extra_content["custom"]
             if CustomConfig in FEATURE_EXTRACTOR_MAPPING._extra_content:
                 del FEATURE_EXTRACTOR_MAPPING._extra_content[CustomConfig]
+
+    def test_fallback_to_image_processor(self):
+        # Ensure an image processor is returned when it exists and no feature extractor is found
+        feature_extractor = AutoFeatureExtractor.from_pretrained("google/bit-50")
+        image_processor = BitImageProcessor.from_pretrained("google/bit-50")
+        self.assertIsInstance(feature_extractor, type(image_processor))
+        self.assertEquals(feature_extractor.__dict__, image_processor.__dict__)
