@@ -22,9 +22,9 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
+    is_tf_available,
     is_torch_available,
     is_vision_available,
-    is_tf_available,
 )
 
 
@@ -54,7 +54,7 @@ else:
         "BeitModel",
         "BeitPreTrainedModel",
     ]
-    
+
 if is_tf_available():
     _import_structure["modeling_tf_beit"] = [
         "TFBeitForMaskedImageModeling",
@@ -106,14 +106,13 @@ if TYPE_CHECKING:
         )
     if is_tf_available():
         from .modeling_tf_beit import (
-            TFBeitForMaskedImageModeling,
             TFBeitForImageClassification,
+            TFBeitForMaskedImageModeling,
             TFBeitForSemanticSegmentation,
             TFBeitModel,
             TFBeitPreTrainedModel,
-            
         )
-        
+
     try:
         if not is_flax_available():
             raise OptionalDependencyNotAvailable()
