@@ -86,12 +86,8 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
             Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
             `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
             the initial embedding outputs.
-            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
-            the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
     """
@@ -902,7 +898,7 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         return self.beit.get_input_embeddings()
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -969,7 +965,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         )
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
@@ -1385,7 +1381,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         return loss
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
