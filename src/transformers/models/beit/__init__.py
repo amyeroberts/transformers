@@ -57,8 +57,8 @@ else:
 
 if is_tf_available():
     _import_structure["modeling_tf_beit"] = [
-        "TFBeitForMaskedImageModeling",
         "TFBeitForImageClassification",
+        "TFBeitForMaskedImageModeling",
         "TFBeitForSemanticSegmentation",
         "TFBeitModel",
         "TFBeitPreTrainedModel",

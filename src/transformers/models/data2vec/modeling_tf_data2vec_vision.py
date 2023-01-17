@@ -73,7 +73,7 @@ TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitModelOutputWithPooling with Beit->Data2VecVision
 class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
     """
-    Class for outputs of [`TFData2VecVisionModel`].
+    Class for outputs of [`Data2VecVisionModel`].
 
     Args:
         last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -84,15 +84,12 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
             will be returned.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
-            `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
+            the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
     """
 
     last_hidden_state: tf.Tensor = None
@@ -126,7 +123,6 @@ class TFData2VecVisionDropPath(tf.keras.layers.Layer):
 class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
-
     """
 
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
@@ -456,7 +452,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
 
         self.attention = TFData2VecVisionAttention(config, window_size=window_size, name="attention")
         self.intermediate = TFData2VecVisionIntermediate(config, name="intermediate")
-        self.data2vec_output = TFData2VecVisionOutput(config, name="output")
+        self.beit_output = TFData2VecVisionOutput(config, name="output")
 
         self.layernorm_before = tf.keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="layernorm_before"
@@ -524,7 +520,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         layer_output = self.layernorm_after(hidden_states)
 
         layer_output = self.intermediate(layer_output)
-        layer_output = self.data2vec_output(layer_output)
+        layer_output = self.beit_output(layer_output)
 
         if self.lambda_2 is not None:
             layer_output = self.lambda_2 * layer_output
@@ -782,7 +778,7 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = Data2VecVisionConfig
-    base_model_prefix = "data2vec_vision"
+    base_model_prefix = "beit"
     main_input_name = "pixel_values"
     _keys_to_ignore_on_load_unexpected = [r"relative_position_index"]
 
@@ -807,9 +803,8 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     )
     def serving(self, inputs):
         """
-        Method used for serving the model.
-
         Args:
+        Method used for serving the model.
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
@@ -897,15 +892,13 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.config = config
 
-        self.data2vec_vision = TFData2VecVisionMainLayer(
-            config, add_pooling_layer=add_pooling_layer, name="data2vec_vision"
-        )
+        self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=add_pooling_layer, name="beit")
 
     def get_input_embeddings(self):
-        return self.data2vec_vision.get_input_embeddings()
+        return self.beit.get_input_embeddings()
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -925,7 +918,7 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         training: bool = False,
     ) -> Union[tuple, TFData2VecVisionModelOutputWithPooling]:
 
-        outputs = self.data2vec_vision(
+        outputs = self.beit(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
@@ -962,7 +955,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=True, name="data2vec_vision")
+        self.beit = TFData2VecVisionMainLayer(config, add_pooling_layer=True, name="beit")
 
         # Classifier head
         self.classifier = tf.keras.layers.Dense(
@@ -972,7 +965,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         )
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
@@ -998,7 +991,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.data2vec_vision(
+        outputs = self.beit(
             pixel_values=pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -1033,9 +1026,8 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
 class TFData2VecVisionConvModule(tf.keras.layers.Layer):
     """
     A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
-    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
-
-    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU). Based on
+    OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
     def __init__(
@@ -1056,7 +1048,7 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
             dilation_rate=dilation,
             name="conv",
         )
-        self.bn = tf.keras.layers.BatchNormalization(name="bn", momentum=0.9, epsilon=1e-5)
+        self.bn = tf.keras.layers.BatchNormalization(name="bn")
         self.activation = tf.nn.relu
 
     def call(self, input: tf.Tensor) -> tf.Tensor:
@@ -1122,7 +1114,7 @@ class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
         return config
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFAdaptiveAvgPool2D 
+# Copied from transformers.models.beit.modeling_tf_beit.TFAdaptiveAvgPool2D
 class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
     def __init__(self, output_shape, mode="dense", **kwargs):
         super().__init__(**kwargs)
@@ -1152,13 +1144,11 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitPyramidPoolingModule with Beit->Data2VecVision
 class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
     """
-    Pyramid Pooling Module (PPM) used in PSPNet.
-
     Args:
+    Pyramid Pooling Module (PPM) used in PSPNet.
         pool_scales (tuple[int]): Pooling scales used in Pooling Pyramid
             Module.
         channels (int): Channels after modules, before conv_seg.
-
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
@@ -1195,9 +1185,8 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
 class TFData2VecVisionUperHead(tf.keras.layers.Layer):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
-    [UPerNet](https://arxiv.org/abs/1807.10221).
-
-    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
+    [UPerNet](https://arxiv.org/abs/1807.10221). Based on OpenMMLab's implementation, found in
+    https://github.com/open-mmlab/mmsegmentation.
     """
 
     def __init__(self, config: Data2VecVisionConfig, **kwargs) -> None:
@@ -1264,15 +1253,11 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitFCNHead with Beit->Data2VecVision
 class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
     """
+    Args:
     Fully Convolution Networks for Semantic Segmentation. This head is implemented from
     [FCNNet](https://arxiv.org/abs/1411.4038).
-
-    Args:
-        config (Data2VecVisionConfig): Configuration.
-        kernel_size (int): The kernel size for convs in the head. Default: 3.
-        dilation (int): The dilation rate for convs in the head. Default: 1.
-
-
+        config (Data2VecVisionConfig): Configuration. kernel_size (int): The kernel size for convs in the head.
+        Default: 3. dilation (int): The dilation rate for convs in the head. Default: 1.
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
@@ -1345,12 +1330,12 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=False, name="data2vec_vision")
+        self.beit = TFData2VecVisionMainLayer(config, add_pooling_layer=False, name="beit")
 
         # FPNs
         self.fpn1 = [
             tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.0"),
-            tf.keras.layers.BatchNormalization(name="fpn1.1", momentum=0.9, epsilon=1e-5),
+            tf.keras.layers.BatchNormalization(name="fpn1.1"),
             tf.keras.layers.Activation("gelu"),
             tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.3"),
         ]
@@ -1395,7 +1380,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         return loss
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -1410,23 +1395,20 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         labels (`tf.Tensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Returns:
-
         Examples:
-
         ```python
-        >>> from transformers import AutoImageProcessor, TFData2VecVisionForSemanticSegmentation
+        >>> from transformers import AutoFeatureExtractor, TFData2VecVisionForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/data2vec-vision-base")
-        >>> model = TFData2VecVisionForSemanticSegmentation.from_pretrained("facebook/data2vec-vision-base")
-
-        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
+        >>> model = TFData2VecVisionForSemanticSegmentation.from_pretrained(
+        ...     "microsoft/beit-base-patch16-224-pt22k-ft22k"
+        ... )
+        >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
@@ -1436,7 +1418,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.data2vec_vision(
+        outputs = self.beit(
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
