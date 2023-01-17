@@ -898,7 +898,7 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         return self.beit.get_input_embeddings()
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -965,7 +965,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         )
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
@@ -1380,7 +1380,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         return loss
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
