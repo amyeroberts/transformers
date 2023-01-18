@@ -2617,6 +2617,15 @@ else:
     _import_structure["models.bart"].extend(
         ["TFBartForConditionalGeneration", "TFBartForSequenceClassification", "TFBartModel", "TFBartPretrainedModel"]
     )
+    _import_structure["models.beit"].extend(
+        [
+            "TFBeitForImageClassification",
+            "TFBeitForMaskedImageModeling",
+            "TFBeitForSemanticSegmentation",
+            "TFBeitModel",
+            "TFBeitPreTrainedModel",
+        ]
+    )
     _import_structure["models.bert"].extend(
         [
             "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
