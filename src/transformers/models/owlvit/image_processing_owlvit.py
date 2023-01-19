@@ -289,7 +289,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
 
         if do_resize is not None and size is None:
-            raise ValueError("Size and max_size must be specified if do_resize is True.")
+            raise ValueError("Size must be specified if do_resize is True.")
 
         if do_center_crop is not None and crop_size is None:
             raise ValueError("Crop size must be specified if do_center_crop is True.")

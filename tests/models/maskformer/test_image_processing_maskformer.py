@@ -163,6 +163,25 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         self.assertEqual(feature_extractor.size, {"shortest_edge": 42, "longest_edge": 84})
         self.assertEqual(feature_extractor.size_divisor, 8)
 
+    def test_backwards_compatibilty_size_parameters(self):
+        feature_extractor = self.feature_extraction_class.from_dict(
+            self.feat_extract_dict, size=42, max_size=84, do_rescale=False, do_normalize=False, do_reduce_labels=False
+        )
+        self.assertEqual(feature_extractor.size, {"shortest_edge": 42, "longest_edge": 84})
+
+        image = np.random.randint(0, 255, (3, 250, 600), dtype=np.uint8)
+        output_image = feature_extractor(images=image)["pixel_values"][0]
+        self.assertEqual(output_image.shape, (3, 35, 84))
+
+        output_image = feature_extractor(images=image, size=50, max_size=100)["pixel_values"][0]
+        self.assertEqual(output_image.shape, (3, 42, 100))
+
+        output_image = feature_extractor(images=image, size=20)["pixel_values"][0]
+        self.assertEqual(output_image.shape, (3, 20, 48))
+
+        output_image = feature_extractor(images=image, max_size=50)["pixel_values"][0]
+        self.assertEqual(output_image.shape, (3, 21, 50))
+
     def test_batch_feature(self):
         pass
 

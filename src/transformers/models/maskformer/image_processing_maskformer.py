@@ -373,7 +373,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         ignore_index (`int`, *optional*):
             Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
             denoted with 0 (background) will be replaced with `ignore_index`.
-        reduce_labels (`bool`, *optional*, defaults to `False`):
+        do_reduce_labels (`bool`, *optional*, defaults to `False`):
             Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
             The background label will be replaced by `ignore_index`.
@@ -394,7 +394,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         ignore_index: Optional[int] = None,
-        reduce_labels: bool = False,
+        do_reduce_labels: bool = False,
         **kwargs
     ):
         if "size_divisibility" in kwargs:
@@ -410,13 +410,18 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 " instead.",
                 FutureWarning,
             )
-            # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
-            # `size` can still be pass in as an int
-            self._max_size = kwargs.pop("max_size")
+            max_size = kwargs.pop("max_size")
         else:
-            self._max_size = 1333
+            max_size = 1333
+        if "reduce_labels" in kwargs:
+            warnings.warn(
+                "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use "
+                "`do_reduce_labels` instead.",
+                FutureWarning,
+            )
+            do_reduce_labels = kwargs.pop("reduce_labels")
 
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
+        size = size if size is not None else {"shortest_edge": 800, "longest_edge": max_size}
         size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
 
         super().__init__(**kwargs)
@@ -430,7 +435,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
-        self.reduce_labels = reduce_labels
+        self.do_reduce_labels = do_reduce_labels
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -462,6 +467,15 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             FutureWarning,
         )
         return self.size["longest_edge"]
+
+    @property
+    def reduce_labels(self):
+        warnings.warn(
+            "The `reduce_labels` property is deprecated and will be removed in v4.27. Please use "
+            "`do_reduce_labels` instead.",
+            FutureWarning,
+        )
+        return self.do_reduce_labels
 
     def resize(
         self,
@@ -645,20 +659,57 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         ignore_index: Optional[int] = None,
-        reduce_labels: Optional[bool] = None,
+        do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         **kwargs
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version",
+                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.27",
                 FutureWarning,
             )
 
+        max_size = self.size.get("longest_edge")
+        if "max_size" in kwargs:
+            warnings.warn(
+                "The `max_size` argument is deprecated and will be removed in version v4.27, use"
+                " `size['longest_edge']` instead.",
+                FutureWarning,
+            )
+            if isinstance(size, dict):
+                if "longest_edge" in size:
+                    raise ValueError(
+                        "You cannot specify both `max_size` and `size['longest_edge']` at the same time."
+                        " Please use `size['longest_edge']` instead."
+                    )
+                raise ValueError(
+                    "If `size` is a dictionary, the `max_size` argument will be ignored. Please specify"
+                    " `size['longest_edge']` instead."
+                )
+            max_size = kwargs["max_size"]
+
+        if "size_divisibilty" in kwargs:
+            warnings.warn("The `size_divisibilty` argument is deprecated and will be removed in v4.27", FutureWarning)
+            if size_divisor is not None:
+                raise ValueError(
+                    "You cannot specify both `size_divisibilty` and `size_divisor` at the same time."
+                    " Please use `size_divisor` instead."
+                )
+            size_divisor = kwargs["size_divisibilty"]
+
+        if "reduce_labels" in kwargs:
+            warnings.warn("The `reduce_labels` argument is deprecated and will be removed in v4.27", FutureWarning)
+            if do_reduce_labels is not None:
+                raise ValueError(
+                    "You cannot specify both `reduce_labels` and `do_reduce_labels` at the same time."
+                    " Please use `do_reduce_labels` instead."
+                )
+            do_reduce_labels = kwargs["reduce_labels"]
+
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False, max_size=self._max_size)
+        size = get_size_dict(size, default_to_square=False, max_size=max_size)
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -667,7 +718,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
-        reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
+        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
         if do_resize is not None and size is None or size_divisor is None:
             raise ValueError("If `do_resize` is True, `size` and `size_divisor` must be provided.")
@@ -720,7 +771,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 for segmentation_map in segmentation_maps
             ]
         encoded_inputs = self.encode_inputs(
-            images, segmentation_maps, instance_id_to_semantic_id, ignore_index, reduce_labels, return_tensors
+            images, segmentation_maps, instance_id_to_semantic_id, ignore_index, do_reduce_labels, return_tensors
         )
         return encoded_inputs
 

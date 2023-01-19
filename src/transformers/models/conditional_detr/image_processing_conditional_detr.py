@@ -792,7 +792,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
         if "max_size" in kwargs:
             warnings.warn(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
+                "The `max_size` parameter is deprecated and will be removed in v4.27. "
                 "Please specify in `size['longest_edge'] instead`.",
                 FutureWarning,
             )
@@ -814,6 +814,16 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+
+    @property
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.max_size
+    def max_size(self):
+        warnings.warn(
+            "The `max_size` parameter is deprecated and will be removed in v4.27. "
+            "Please specify in `size['longest_edge'] instead`.",
+            FutureWarning,
+        )
+        return self.size["longest_edge"]
 
     @classmethod
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->ConditionalDetr
@@ -896,10 +906,14 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         """
         if "max_size" in kwargs:
             warnings.warn(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
+                "The `max_size` parameter is deprecated and will be removed in v4.27. "
                 "Please specify in `size['longest_edge'] instead`.",
                 FutureWarning,
             )
+            if isinstance(size, dict) and "longest_edge" in size:
+                raise ValueError(
+                    "You cannot specify both `max_size` and `size['longest_edge']`. Please use `size['longest_edge']`."
+                )
             max_size = kwargs.pop("max_size")
         else:
             max_size = None
@@ -1126,20 +1140,42 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         """
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
+                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.27, "
                 "use `do_pad` instead.",
                 FutureWarning,
             )
+            if do_pad is not None:
+                raise ValueError(
+                    "You cannot use both `pad_and_return_pixel_mask` and `do_pad` at the same time. "
+                    "Please use `do_pad` instead."
+                )
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
-        max_size = None
+        max_size = self.size.get("longest_edge")
         if "max_size" in kwargs:
             warnings.warn(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
+                "The `max_size` argument is deprecated and will be removed in version v4.27, use"
                 " `size['longest_edge']` instead.",
                 FutureWarning,
             )
-            size = kwargs.pop("max_size")
+            if isinstance(size, dict):
+                if "longest_edge" in size:
+                    raise ValueError(
+                        "You cannot specify both `max_size` and `size['longest_edge']` at the same time."
+                        " Please use `size['longest_edge']` instead."
+                    )
+                raise ValueError(
+                    "If `size` is a dictionary, the `max_size` argument will be ignored. Please specify"
+                    " `size['longest_edge']` instead."
+                )
+            elif size is None:
+                # We take the default value of self.size and update it with the value of max_size
+                size = self.size
+                size["longest_edge"] = kwargs["max_size"]
+            elif isinstance(size, int):
+                max_size = kwargs["max_size"]
+            else:
+                raise ValueError(f"Invalid value for `size`: {size}. Expected a dictionary.")
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
@@ -1229,7 +1265,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 resized_images, resized_annotations = [], []
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image)
-                    resized_image = self.resize(image, size=size, max_size=max_size, resample=resample)
+                    resized_image = self.resize(image, size=size, resample=resample)
                     resized_annotation = self.resize_annotation(target, orig_size, get_image_size(resized_image))
                     resized_images.append(resized_image)
                     resized_annotations.append(resized_annotation)

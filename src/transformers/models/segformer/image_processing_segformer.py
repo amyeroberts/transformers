@@ -100,7 +100,7 @@ class SegformerImageProcessor(BaseImageProcessor):
     ) -> None:
         if "reduce_labels" in kwargs:
             warnings.warn(
-                "The `reduce_labels` parameter is deprecated and will be removed in a future version. Please use "
+                "The `reduce_labels` parameter is deprecated and will be removed in a v4.27. Please use "
                 "`do_reduce_labels` instead.",
                 FutureWarning,
             )
@@ -118,6 +118,15 @@ class SegformerImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_reduce_labels = do_reduce_labels
+
+    @property
+    def reduce_labels(self):
+        warnings.warn(
+            "The `reduce_labels` property is deprecated and will be removed in a v4.27. Please use "
+            "`do_reduce_labels` instead.",
+            FutureWarning,
+        )
+        return self.do_reduce_labels
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -366,6 +375,19 @@ class SegformerImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
+        if "reduce_labels" in kwargs:
+            warnings.warn(
+                "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use "
+                "`do_reduce_labels` instead.",
+                FutureWarning,
+            )
+            if do_reduce_labels is not None:
+                raise ValueError(
+                    "You cannot specify both `reduce_labels` and `do_reduce_labels`. Please use `do_reduce_labels`"
+                    " instead."
+                )
+            do_reduce_labels = kwargs["reduce_labels"]
+
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize

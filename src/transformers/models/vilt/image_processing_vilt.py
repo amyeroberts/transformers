@@ -428,6 +428,19 @@ class ViltImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
+        if "pad_and_create_pixel_mask" in kwargs and do_pad is None:
+            warnings.warn(
+                "The `pad_and_create_pixel_mask` argument is deprecated and will be removed in v4.27. Please use"
+                " `do_pad` instead.",
+                FutureWarning,
+            )
+            if do_pad is not None:
+                raise ValueError(
+                    "You cannot set both `pad_and_create_pixel_mask` and `do_pad` at the same time. Please use"
+                    " `do_pad` instead."
+                )
+            do_pad = kwargs.pop("pad_and_create_pixel_mask")
+
         do_resize = do_resize if do_resize is not None else self.do_resize
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
