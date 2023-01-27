@@ -1304,6 +1304,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         collate_fn_args: Optional[Dict[str, Any]] = None,
         drop_remainder: Optional[bool] = None,
         prefetch: bool = True,
+        num_test_batches: int = 20,
     ):
         """
         Wraps a HuggingFace [`~datasets.Dataset`] as a `tf.data.Dataset` with collation and batching. This method is
@@ -1335,7 +1336,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             prefetch (`bool`, defaults to `True`):
                 Whether to add prefetching to the end of the `tf.data` pipeline. This is almost always beneficial for
                 performance, but can be disabled in edge cases.
-
+            num_test_batches (`int`, *optional*, defaults to 20):
+                Number of batches to use to infer the output signature of the dataset. The higher this number, the more
+                accurate the signature will be, but the longer it will take to create the dataset.
 
         Returns:
             `Dataset`: A `tf.data.Dataset` which is ready to pass to the Keras API.
@@ -1362,6 +1365,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 collate_fn=collate_fn,
                 collate_fn_args=collate_fn_args,
                 cols_to_retain=model_inputs,
+                num_test_batches=num_test_batches,
             )
         else:
             # TODO Matt: This is a workaround for older versions of datasets that are missing the `cols_to_retain`
@@ -1373,7 +1377,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             ]
             dataset = dataset.remove_columns(unwanted_columns)
             output_signature, _ = dataset._get_output_signature(
-                dataset, batch_size=None, collate_fn=collate_fn, collate_fn_args=collate_fn_args
+                dataset,
+                batch_size=None,
+                collate_fn=collate_fn,
+                collate_fn_args=collate_fn_args,
+                num_test_batches=num_test_batches,
             )
         output_columns = list(output_signature.keys())
         feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
@@ -1390,6 +1398,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             collate_fn=collate_fn,
             collate_fn_args=collate_fn_args,
             prefetch=prefetch,
+            num_test_batches=num_test_batches,
         )
         return tf_dataset
 
