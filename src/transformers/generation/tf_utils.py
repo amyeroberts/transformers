@@ -432,12 +432,15 @@ class TFGenerationMixin:
 
     The class exposes [`~generation.TFGenerationMixin.generate`], which can be used for:
         - *greedy decoding* by calling [`~generation.TFGenerationMixin.greedy_search`] if `num_beams=1` and
-          `do_sample=False`.
+          `do_sample=False`
         - *contrastive search* by calling [`~generation.TFGenerationMixin.contrastive_search`] if `penalty_alpha>0` and
           `top_k>1`
         - *multinomial sampling* by calling [`~generation.TFGenerationMixin.sample`] if `num_beams=1` and
-          `do_sample=True`.
-        - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1`.
+          `do_sample=True`
+        - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1`
+
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
+    learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
     """
 
     _seed_generator = None
@@ -541,8 +544,8 @@ class TFGenerationMixin:
         model's default generation configuration. You can override any `generation_config` by passing the corresponding
         parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
-        For a complete overview of generate, check the [following
-        guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation).
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
 
         </Tip>
 
@@ -585,69 +588,7 @@ class TFGenerationMixin:
                     - [`~generation.TFBeamSearchEncoderDecoderOutput`],
                     - [`~generation.TFBeamSampleEncoderDecoderOutput`]
 
-        Examples:
-
-        Greedy decoding, using the default generation configuration and ad hoc modifications:
-
-        ```python
-        >>> from transformers import AutoTokenizer, TFAutoModelForCausalLM
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
-
-        >>> prompt = "Today I believe we can finally"
-        >>> input_ids = tokenizer(prompt, return_tensors="tf").input_ids
-
-        >>> # Generate up to 30 tokens
-        >>> outputs = model.generate(input_ids, do_sample=False, max_length=30)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today I believe we can finally get to the point where we can make a difference in the lives of the people of the United States of America.\n']
-        ```
-
-        Multinomial sampling, modifying an existing generation configuration:
-
-        ```python
-        >>> from transformers import AutoTokenizer, TFAutoModelForCausalLM, GenerationConfig
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
-
-        >>> prompt = "Today I believe we can finally"
-        >>> input_ids = tokenizer(prompt, return_tensors="tf").input_ids
-
-        >>> # Sample up to 30 tokens
-        >>> generation_config = GenerationConfig.from_pretrained("gpt2")
-        >>> generation_config.max_length = 30
-        >>> generation_config.do_sample = True
-        >>> outputs = model.generate(input_ids, generation_config=generation_config, seed=[0, 0])
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ["Today I believe we can finally start taking a bold stand against climate change and climate change mitigation efforts such as President Obama's climate ban and President Trump's"]
-        ```
-
-        Beam-search decoding, using a freshly initialized generation configuration:
-
-        ```python
-        >>> from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM, GenerationConfig
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-        >>> model = TFAutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-
-        >>> sentence = "Paris is one of the densest populated areas in Europe."
-        >>> input_ids = tokenizer(sentence, return_tensors="tf").input_ids
-
-        >>> generation_config = GenerationConfig(
-        ...     max_length=64,
-        ...     num_beams=5,
-        ...     bos_token_id=0,
-        ...     eos_token_id=0,
-        ...     decoder_start_token_id=58100,
-        ...     pad_token_id=58100,
-        ...     bad_words_ids=[[58100]],
-        ... )
-        >>> outputs = model.generate(input_ids, generation_config=generation_config)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
-        ```"""
+        """
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
@@ -759,21 +700,21 @@ class TFGenerationMixin:
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
             warnings.warn(
-                "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to"
-                f" {generation_config.max_length} (`generation_config.max_length`). Controlling `max_length` via the"
-                " config is deprecated and `max_length` will be removed from the config in v5 of Transformers -- we"
+                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
+                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
                 " recommend using `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
-        elif has_default_max_length and generation_config.max_new_tokens is not None:
+        elif generation_config.max_new_tokens is not None:
             generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
-        elif not has_default_max_length and generation_config.max_new_tokens is not None:
-            raise ValueError(
-                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a"
-                " limit to the generated output length. Remove one of those arguments. Please refer to the"
-                " documentation for more information. "
-                "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
-            )
+            if not has_default_max_length:
+                logger.warn(
+                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
+                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
+                    "Please refer to the documentation for more information. "
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)",
+                    UserWarning,
+                )
 
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
             raise ValueError(
@@ -2437,6 +2378,8 @@ class TFGenerationMixin:
             else self.generation_config.return_dict_in_generate
         )
         use_cache = True  # In contrastive search, we always use cache
+        model_kwargs.pop("use_cache", None)
+
         use_xla = not tf.executing_eagerly()
         # TODO (Joao): fix cache format or find programatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
