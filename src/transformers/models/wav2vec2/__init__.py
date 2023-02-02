@@ -60,7 +60,11 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_tf_wav2vec2"] = [
         "TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFWav2Vec2ForAudioFrameClassification",
         "TFWav2Vec2ForCTC",
+        "TFWav2Vec2ForPreTraining",
+        "TFWav2Vec2ForSequenceClassification",
+        "TFWav2Vec2ForXVector",
         "TFWav2Vec2Model",
         "TFWav2Vec2PreTrainedModel",
     ]
@@ -111,7 +115,11 @@ if TYPE_CHECKING:
     else:
         from .modeling_tf_wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWav2Vec2ForAudioFrameClassification,
             TFWav2Vec2ForCTC,
+            TFWav2Vec2ForPreTraining,
+            TFWav2Vec2ForSequenceClassification,
+            TFWav2Vec2ForXVector,
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
         )

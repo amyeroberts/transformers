@@ -1221,11 +1221,11 @@ class AutoModelForAudioXVector(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_AUDIO_XVECTOR_MAPPING
 
 
+AutoModelForAudioXVector = auto_class_update(AutoModelForAudioXVector, head_doc="audio retrieval via x-vector")
+
+
 class AutoBackbone(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_BACKBONE_MAPPING
-
-
-AutoModelForAudioXVector = auto_class_update(AutoModelForAudioXVector, head_doc="audio retrieval via x-vector")
 
 
 class AutoModelForMaskedImageModeling(_BaseAutoModelClass):

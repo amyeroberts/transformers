@@ -24,7 +24,13 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
+from ...modeling_tf_outputs import (
+    TFBaseModelOutput,
+    TFCausalLMOutput,
+    TFSequenceClassifierOutput,
+    TFTokenClassifierOutput,
+    TFXVectorOutput,
+)
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
     booleans_processing,
@@ -35,6 +41,7 @@ from ...modeling_tf_utils import (
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -48,8 +55,30 @@ logger = logging.get_logger(__name__)
 
 _HIDDEN_STATES_START_POSITION = 2
 
-_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
+
+# General docstring
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+
+# CTC docstring
+_TF_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
+_TF_CTC_EXPECTED_LOSS = 53.48
+
+# Audio class docstring
+_TF_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
+_TF_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_TF_SEQ_CLASS_EXPECTED_LOSS = 6.54
+
+# Frame class docstring
+_TF_FRAME_CLASS_CHECKPOINT = "anton-l/wav2vec2-base-superb-sd"
+_TF_FRAME_EXPECTED_OUTPUT = [0, 0]
+
+# Speaker Verification docstring
+_TF_XVECTOR_CHECKPOINT = "anton-l/wav2vec2-base-superb-sv"
+_TF_XVECTOR_EXPECTED_OUTPUT = 0.98
 
 TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/wav2vec2-base-960h",
@@ -60,6 +89,48 @@ TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 LARGE_NEGATIVE = -1e8
+
+
+@dataclass
+class TFWav2Vec2ForPreTrainingOutput(ModelOutput):
+    """
+    Output type of [`Wav2Vec2ForPreTraining`], with potential hidden states and attentions.
+
+    Args:
+        loss (*optional*, returned when `sample_negative_indices` are passed, `tf.Tensor` of shape `(1,)`):
+            Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
+            paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+        projected_states (`tf.Tensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
+            projected quantized states.
+        projected_quantized_states (`tf.Tensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
+            target vectors for contrastive loss.
+        hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        contrastive_loss (*optional*, returned when `sample_negative_indices` are passed, `tf.Tensor` of shape `(1,)`):
+            The contrastive loss (L_m) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+        diversity_loss (*optional*, returned when `sample_negative_indices` are passed, `tf.Tensor` of shape `(1,)`):
+            The diversity loss (L_d) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+    """
+
+    loss: Optional[tf.Tensor] = None
+    projected_states: tf.Tensor = None
+    projected_quantized_states: tf.Tensor = None
+    codevector_perplexity: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
+    contrastive_loss: Optional[tf.Tensor] = None
+    diversity_loss: Optional[tf.Tensor] = None
 
 
 @dataclass
@@ -604,6 +675,42 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
         output = super().call(padded_inputs)
 
         return output
+
+
+def _sample_negative_indices(
+    features_shape: Tuple, num_negatives: int, mask_time_indices: Optional[np.ndarray] = None
+):
+    """
+    Sample `num_negatives` vectors from feature vectors.
+    """
+    batch_size, sequence_length = features_shape
+
+    # generate indices of the positive vectors themselves, repeat them `num_negatives` times
+    sequence_length_range = np.arange(sequence_length)
+
+    # get `num_negatives` random vector indices from the same utterance
+    sampled_negative_indices = np.zeros(shape=(batch_size, sequence_length, num_negatives), dtype=np.int32)
+
+    mask_time_indices = (
+        mask_time_indices.astype(bool) if mask_time_indices is not None else np.ones(features_shape, dtype=bool)
+    )
+
+    for batch_idx in range(batch_size):
+        high = mask_time_indices[batch_idx].sum() - 1
+        mapped_masked_indices = sequence_length_range[mask_time_indices[batch_idx]]
+
+        feature_indices = np.broadcast_to(np.arange(high + 1)[:, None], (high + 1, num_negatives))
+        sampled_indices = np.random.randint(0, high, size=(high + 1, num_negatives))
+        # avoid sampling the same positive vector, but keep the distribution uniform
+        sampled_indices[sampled_indices >= feature_indices] += 1
+
+        # remap to actual indices
+        sampled_negative_indices[batch_idx][mask_time_indices[batch_idx]] = mapped_masked_indices[sampled_indices]
+
+        # correct for batch size
+        sampled_negative_indices[batch_idx] += batch_idx * sequence_length
+
+    return sampled_negative_indices
 
 
 class TFWav2Vec2NoLayerNormConvLayer(tf.keras.layers.Layer):
@@ -1166,6 +1273,103 @@ class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
         )
 
 
+class TFWav2Vec2GumbelVectorQuantizer(tf.keras.layers.Layer):
+    """
+    Vector quantization using gumbel softmax. See `[CATEGORICAL REPARAMETERIZATION WITH
+    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
+    """
+
+    def __init__(self, config: Wav2Vec2Config, **kwargs):
+        super().__init__(**kwargs)
+        self.num_groups = config.num_codevector_groups
+        self.num_vars = config.num_codevectors_per_group
+        self.config = config
+
+        if config.codevector_dim % self.num_groups != 0:
+            raise ValueError(
+                f"`config.codevector_dim {config.codevector_dim} must be divisible "
+                f"by `config.num_codevector_groups` {self.num_groups} for concatenation"
+            )
+        self.weight_proj = tf.keras.layers.Dense(self.num_groups * self.num_vars, name="weight_proj")
+
+        # can be decayed for training
+        self.temperature = 2
+
+    def build(self, input_shape):
+        # storage for codebook variables (codewords)
+        self.codevectors = self.add_weight(
+            shape=(1, self.config.num_groups * self.config.num_vars, self.config.codevector_dim // self.num_groups),
+            # initializer="uniform",  # FIXME
+            trainable=True,
+            name="codevectors",
+        )
+        return super().build(input_shape)
+
+    @staticmethod
+    def _compute_perplexity(probs, mask=None):
+        if mask is not None:
+            mask_extended = mask.flatten()[:, None, None].expand(probs.shape)  # FIXME
+            probs = tf.where(mask_extended, probs, tf.zeros_like(probs))
+            marginal_probs = tf.reduce_sum(probs, axis=0) / tf.reduce_sum(mask)
+        else:
+            marginal_probs = tf.reduce_mean(probs, axis=0)
+
+        perplexity = tf.reduce_sum(
+            tf.math.exp(-tf.reduce_sum(marginal_probs * tf.math.log(marginal_probs + 1e-7), axis=-1))
+        )
+        return perplexity
+
+    def call(self, hidden_states, mask_time_indices=None, training=False):
+        batch_size, sequence_length, hidden_size = tf.shape(hidden_states)
+
+        # project to codevector dim
+        hidden_states = self.weight_proj(hidden_states)
+        hidden_states = tf.reshape(hidden_states, (batch_size * sequence_length * self.num_groups, -1))
+
+        if training:
+            # sample code vector probs via gumbel in differentiateable way
+            import tensorflow_probability as tfp  # FIXME
+
+            # codevector_probs = nn.functional.gumbel_softmax(
+            #     hidden_states.float(), tau=self.temperature, hard=True
+            # ).type_as(hidden_states)
+            gumbel_dist = tfp.distributions.RelaxedOneHotCategorical(
+                self.temperature, logits=hidden_states, validate_args=True
+            )
+            codevector_probs = gumbel_dist.sample()
+            codevector_probs = tf.cast(codevector_probs, dtype=hidden_states.dtype)
+
+            # compute perplexity
+            codevector_soft_dist = stable_softmax(
+                tf.cast(tf.reshape(hidden_states, (batch_size * sequence_length, self.num_groups, -1)), tf.float32),
+                axis=-1,
+            )
+            perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
+        else:
+            # take argmax in non-differentiable way
+            # comptute hard codevector distribution (one hot)
+            codevector_idx = tf.argmax(hidden_states, axis=-1)
+            codevector_probs = tf.zeros_like(hidden_states)
+            # codevector_probs = hidden_states.new_zeros(hidden_states.shape).scatter_(
+            #     -1, codevector_idx.view(-1, 1), 1.0
+            # )  #FIXME - needs safe update as index oob won't throw error
+            codevector_probs = tf.scatter_nd(codevector_idx, 1.0, codevector_probs.shape)
+            codevector_probs = tf.reshape(codevector_probs, (batch_size * sequence_length, self.num_groups, -1))
+
+            perplexity = self._compute_perplexity(codevector_probs, mask_time_indices)
+
+        codevector_probs = tf.reshape(codevector_probs, (batch_size * sequence_length, -1))
+        # use probs to retrieve codevectors
+        codevectors_per_group = tf.expand_dims(codevector_probs, -1) * self.codevectors
+        codevectors = tf.reshape(
+            codevectors_per_group, (batch_size * sequence_length, self.num_groups, self.num_vars, -1)
+        )
+        codevectors = tf.reduce_sum(codevectors, axis=-2)
+        codevectors = tf.reshape(codevectors, (batch_size, sequence_length, -1))
+
+        return codevectors, perplexity
+
+
 @keras_serializable
 class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
     config_class = Wav2Vec2Config
@@ -1457,6 +1661,244 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
 """
 
 
+@add_start_docstrings("""TFWav2Vec2Model with a quantizer and `VQ` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
+class TFWav2Vec2ForPreTraining(TFWav2Vec2PreTrainedModel):
+    def __init__(self, config: Wav2Vec2Config, **kwargs):
+        super().__init__(config, **kwargs)
+        self.wav2vec2 = TFWav2Vec2Model(config, name="wav2vec2")
+        self.dropout_features = tf.keras.layers.Dropout(config.feat_quantizer_dropout, name="dropout_features")
+
+        self.quantizer = TFWav2Vec2GumbelVectorQuantizer(config, name="quantizer")
+
+        # make sure that project_hid & project_q are initialized like normal linear layers
+        self.project_hid = tf.keras.layers.Dense(config.proj_codevector_dim, name="project_hid")
+        self.project_q = tf.keras.layers.Dense(config.proj_codevector_dim, name="project_q")
+
+    def set_gumbel_temperature(self, temperature: int):
+        """
+        Set the Gumbel softmax temperature to a given value. Only necessary for training
+        """
+        self.quantizer.temperature = temperature
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.wav2vec2.feature_extractor.trainable = False
+
+    @staticmethod
+    def compute_contrastive_logits(
+        target_features: tf.Tensor,
+        negative_features: tf.Tensor,
+        predicted_features: tf.Tensor,
+        temperature: int = 0.1,
+    ):
+        """
+        Compute logits for contrastive loss based using cosine similarity as the distance measure between
+        `[positive_feature, negative_features]` and `[predicted_features]`. Additionally, temperature can be applied.
+        """
+        target_features = tf.concat([target_features, negative_features], axis=0)
+
+        logits = tf.cast(
+            tf.keras.losses.cosine_similarity(
+                tf.cast(predicted_features, tf.float32), tf.cast(target_features, tf.float32), axis=-1
+            ),
+            target_features.dtype,
+        )
+
+        # apply temperature
+        logits = logits / temperature
+        return logits
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFWav2Vec2ForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        input_values: Optional[tf.Tensor],
+        attention_mask: Optional[tf.Tensor] = None,
+        mask_time_indices: Optional[tf.Tensor] = None,
+        sampled_negative_indices: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TFWav2Vec2ForPreTrainingOutput]:
+        r"""
+        mask_time_indices (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
+        sampled_negative_indices (`tf.Tensor` of shape `(batch_size, sequence_length, num_negatives)`, *optional*):
+            Indices indicating which quantized target vectors are used as negative sampled vectors in contrastive loss.
+            Required input for pre-training.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import AutoFeatureExtractor, TFWav2Vec2ForPreTraining
+        >>> from transformers.models.wav2vec2.modeling_tf_wav2vec2 import (
+        ...     _compute_mask_indices,
+        ...     _sample_negative_indices,
+        ... )
+        >>> from datasets import load_dataset
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
+        >>> model = TFWav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> input_values = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf").input_values  # Batch size 1
+
+        >>> # compute masked indices
+        >>> batch_size, raw_sequence_length = tf.shape(input_values)
+        >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
+        >>> mask_time_indices = _compute_mask_indices(
+        ...     shape=(batch_size, sequence_length), mask_prob=0.2, mask_length=2
+        ... )
+        >>> sampled_negative_indices = _sample_negative_indices(
+        ...     features_shape=(batch_size, sequence_length),
+        ...     num_negatives=model.config.num_negatives,
+        ...     mask_time_indices=mask_time_indices,
+        ... )
+        >>> mask_time_indices = tf.Tensor(data=mask_time_indices, device=input_values.device, dtype=tf.int64)
+        >>> sampled_negative_indices = tf.Tensor(
+        ...     data=sampled_negative_indices, device=input_values.device, dtype=tf.int64
+        ... )
+
+        >>> outputs = model(input_values, mask_time_indices=mask_time_indices)
+
+        >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
+        >>> cosine_sim = tf.keras.losses.cosine_similarity(
+        ...     outputs.projected_states, outputs.projected_quantized_states, axis=-1
+        ... )
+
+        >>> # show that cosine similarity is much higher than random
+        >>> tf.reduce_sum(cosine_sim[tf.cast(mask_time_indices, tf.bool)]) > 0.5
+        tensor(True)
+
+        >>> # for contrastive loss training model should be put into train mode
+        >>> # model = model.train()  # FIXME
+        >>> loss = model(
+        ...     input_values,
+        ...     mask_time_indices=mask_time_indices,
+        ...     sampled_negative_indices=sampled_negative_indices,
+        ...     training=True,  # FIXME
+        ... ).loss
+        ```"""
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if mask_time_indices is not None:
+            mask_time_indices = tf.cast(mask_time_indices, tf.bool)
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            mask_time_indices=mask_time_indices,
+            return_dict=return_dict,
+        )
+
+        # 1. project all transformed features (including masked) to final vq dim
+        transformer_features = self.project_hid(outputs[0])
+
+        # 2. quantize all (unmasked) extracted features and project to final vq dim
+        extract_features = self.dropout_features(outputs[1])
+
+        if attention_mask is not None:
+            # compute reduced attention_mask correponding to feature vectors
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask, add_adapter=False
+            )
+
+        quantized_features, codevector_perplexity = self.quantizer(
+            extract_features, mask_time_indices=mask_time_indices
+        )
+        quantized_features = self.project_q(quantized_features)
+
+        loss = contrastive_loss = diversity_loss = None
+        if sampled_negative_indices is not None:
+            batch_size, sequence_length, hidden_size = shape_list(quantized_features)
+
+            # for training, we sample negatives
+            # 3. sample K negatives (distractors) quantized states for contrastive loss
+            # if attention_mask is passed, make sure that padded feature vectors cannot be sampled
+            # sample negative quantized vectors BTC => (BxT)C
+            negative_quantized_features = tf.reshape(quantized_features, (-1, hidden_size))[
+                tf.reshape(tf.cast(sampled_negative_indices, tf.int64), (-1,))
+            ]
+            negative_quantized_features = tf.reshape(
+                negative_quantized_features, (batch_size, sequence_length, -1, hidden_size)
+            )
+            negative_quantized_features = tf.transpose(negative_quantized_features, (2, 0, 1, 3))
+
+            # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
+            # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
+            logits = self.compute_contrastive_logits(
+                quantized_features[None, :],
+                negative_quantized_features,
+                transformer_features,
+                self.config.contrastive_logits_temperature,
+            )
+
+            # 5. if a negative vector is identical to the positive (i.e. when codebook utilization is low),
+            # its cosine similarity will be masked
+            neg_is_pos = tf.reduce_all(quantized_features == negative_quantized_features, axis=-1)
+
+            if tf.reduce_any(neg_is_pos):
+                logits[1:][neg_is_pos] = float("-inf")
+
+            # 6. compute contrastive loss \mathbf{L}_m = cross_entropy(logs) =
+            # -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))
+            logits = tf.transpose(logits, (2, 1, 0))
+            logits = tf.reshape(logits, (-1, tf.shape(logits)[0]))
+
+            target = (1 - tf.cast(mask_time_indices, tf.int64)) * -100
+            target = tf.transpose(target, (1, 0))
+            target = tf.reshape(target, (-1,))
+
+            contrastive_loss = tf.keras.losses.cross_entropy(logits.float(), target, reduction="sum")
+
+            # 7. compute diversity loss: \mathbf{L}_d
+            num_codevectors = self.config.num_codevectors_per_group * self.config.num_codevector_groups
+            diversity_loss = ((num_codevectors - codevector_perplexity) / num_codevectors) * tf.reduce_sum(
+                mask_time_indices
+            )
+
+            # 8. \mathbf{L} = \mathbf{L}_m + \alpha * \mathbf{L}_d
+            loss = contrastive_loss + self.config.diversity_loss_weight * diversity_loss
+
+        if not return_dict:
+            if loss is not None:
+                return (loss, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
+            return (transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
+
+        return TFWav2Vec2ForPreTrainingOutput(
+            loss=loss,
+            projected_states=transformer_features,
+            projected_quantized_states=quantized_features,
+            codevector_perplexity=codevector_perplexity,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            contrastive_loss=contrastive_loss,
+            diversity_loss=diversity_loss,
+        )
+
+
 @add_start_docstrings(
     "The bare TFWav2Vec2 Model transformer outputing raw hidden-states without any specific head on top.",
     WAV_2_VEC_2_START_DOCSTRING,
@@ -1733,3 +2175,481 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
         return TFCausalLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
+
+
+@add_start_docstrings(
+    """
+    TFWav2Vec2 Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
+    SUPERB Keyword Spotting.
+    """,
+    WAV_2_VEC_2_START_DOCSTRING,
+)
+class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+
+        if hasattr(config, "add_adapter") and config.add_adapter:
+            raise ValueError(
+                "Sequence classification does not support the use of Wav2Vec2 adapters (config.add_adapter=True)"
+            )
+        self.config = config
+        self.wav2vec2 = TFWav2Vec2Model(config, name="wav2vec2")
+        self.projector = tf.keras.layers.Dense(config.classifier_proj_size, name="projector")
+        self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier")
+
+    def build(self, input_shape):
+        if self.config.use_weighted_layer_sum:
+            num_layers = self.config.num_hidden_layers + 1  # transformer layers + input embeddings
+            layer_weights = tf.ones(num_layers) / num_layers
+            self.layer_weights = self.add_weight(
+                shape=(num_layers,),
+                initializer=tf.keras.initializers.Constant(layer_weights),
+                trainable=True,  # FIXME
+                name="layer_weights",
+            )
+        return super().build(input_shape)
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.wav2vec2.feature_extractor.trainable = False
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        # FIXME
+        # for param in self.wav2vec2.parameters():
+        #     param.requires_grad = False
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_TF_SEQ_CLASS_CHECKPOINT,
+        output_type=TFSequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+        expected_output=_TF_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_TF_SEQ_CLASS_EXPECTED_LOSS,
+    )
+    @unpack_inputs
+    def call(
+        self,
+        input_values: Optional[tf.Tensor],
+        attention_mask: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[tf.Tensor] = None,
+    ) -> Union[Tuple, TFSequenceClassifierOutput]:
+        r"""
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if self.config.use_weighted_layer_sum:
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = tf.stack(hidden_states, axis=1)
+            norm_weights = stable_softmax(self.layer_weights, axis=-1)
+            hidden_states = hidden_states * tf.reshape(norm_weights, (-1, 1, 1))
+            hidden_states = tf.reduce_sum(hidden_states, axis=1)
+        else:
+            hidden_states = outputs[0]
+
+        hidden_states = self.projector(hidden_states)
+        if attention_mask is None:
+            pooled_output = tf.reduce_mean(hidden_states, axis=1)
+        else:
+            padding_mask = self._get_feature_vector_attention_mask(tf.shape(hidden_states)[1], attention_mask)
+            hidden_states[~padding_mask] = 0.0
+            pooled_output = tf.reduce_sum(hidden_states, axis=1) / tf.reshape(
+                tf.reduce_sum(padding_mask, axis=1), (-1, 1)
+            )
+
+        logits = self.classifier(pooled_output)
+
+        loss = None if labels is None else self.hf_compute_loss(labels, logits)
+        # loss = None
+        # if labels is not None:
+        #     loss_fct = CrossEntropyLoss()
+        #     loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Wav2Vec2 Model with a frame classification head on top for tasks like Speaker Diarization.
+    """,
+    WAV_2_VEC_2_START_DOCSTRING,
+)
+class TFWav2Vec2ForAudioFrameClassification(TFWav2Vec2PreTrainedModel):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+
+        if hasattr(config, "add_adapter") and config.add_adapter:
+            raise ValueError(
+                "Audio frame classification does not support the use of Wav2Vec2 adapters (config.add_adapter=True)"
+            )
+        self.wav2vec2 = TFWav2Vec2Model(config, "wav2vec2")
+        self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier")
+        self.num_labels = config.num_labels
+
+    def build(self, input_shape):
+        if self.config.use_weighted_layer_sum:
+            num_layers = self.config.num_hidden_layers + 1  # transformer layers + input embeddings
+            layer_weights = tf.ones(num_layers) / num_layers
+            self.layer_weights = self.add_weight(
+                shape=(num_layers,),
+                initializer=tf.keras.initializers.Constant(layer_weights),
+                trainable=True,  # FIXME
+                name="layer_weights",
+            )
+        return super().build(input_shape)
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.wav2vec2.feature_extractor.trainable = False
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        # FIXME
+        # for param in self.wav2vec2.parameters():
+        #     param.requires_grad = False
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_TF_FRAME_CLASS_CHECKPOINT,
+        output_type=TFTokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+        expected_output=_TF_FRAME_EXPECTED_OUTPUT,
+    )
+    @unpack_inputs
+    def call(
+        self,
+        input_values: Optional[tf.Tensor],
+        attention_mask: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TFTokenClassifierOutput]:
+        r"""
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if self.config.use_weighted_layer_sum:
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = tf.stack(hidden_states, axis=1)
+            norm_weights = stable_softmax(self.layer_weights, axis=-1)
+            hidden_states = tf.reduce_sum(hidden_states * tf.reshape(norm_weights, (-1, 1, 1)), axis=1)
+        else:
+            hidden_states = outputs[0]
+
+        logits = self.classifier(hidden_states)
+
+        loss = None if labels is None else self.hf_compute_loss(labels, logits)
+        # loss = None
+        # if labels is not None:
+        #     loss_fct = CrossEntropyLoss()
+        #     loss = loss_fct(logits.view(-1, self.num_labels), tf.argmax(labels.view(-1, self.num_labels), axis=1))
+
+        if not return_dict:
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return output
+
+        return TFTokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class TFAMSoftmaxLoss(tf.keras.layers.Layer):
+    def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4, **kwargs):
+        super().__init__(**kwargs)
+        self.scale = scale
+        self.margin = margin
+        self.input_dim = input_dim
+        self.num_labels = num_labels
+        self.loss = tf.keras.losses.SparseCategoricalCrossentropy()  # FIXME nn.CrossEntropyLoss()
+
+    def build(self, input_shape):
+        # self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
+        self.weight = self.add_weight(
+            name="weight",
+            shape=(self.input_dim, self.num_labels),
+            initializer="glorot_uniform",  # FIXME
+            trainable=True,
+        )
+        super().build(input_shape)
+
+    def call(self, hidden_states, labels):
+        labels = labels.flatten()
+        weight = tf.linalg.normalize(self.weight, ord=2, axis=0)  # check ord, axis
+        hidden_states = tf.linalg.normalize(hidden_states, ord=2, axis=1)  # check ord, axis
+        cos_theta = tf.matmul(hidden_states, weight)
+        psi = cos_theta - self.margin
+
+        onehot = tf.one_hot(labels, self.num_labels)
+        logits = self.scale * tf.where(tf.cast(onehot, tf.bool), psi, cos_theta)
+        loss = self.loss(logits, labels)
+
+        return loss
+
+
+class TFTDNNLayer(tf.keras.layers.Layer):
+    def __init__(self, config, layer_id=0, **kwargs):
+        super().__init__(**kwargs)
+        self.in_conv_dim = config.tdnn_dim[layer_id - 1] if layer_id > 0 else config.tdnn_dim[layer_id]
+        self.out_conv_dim = config.tdnn_dim[layer_id]
+        self.kernel_size = config.tdnn_kernel[layer_id]
+        self.dilation = config.tdnn_dilation[layer_id]
+
+        self.kernel = tf.keras.layers.Dense(self.out_conv_dim, name="kernel")
+        self.activation = tf.keras.activations.relu
+
+    def call(self, hidden_states):
+        hidden_states = hidden_states.unsqueeze(1)
+        # nn.functional.unfold - FIXME
+        hidden_states = tf.image.extract_patches(
+            hidden_states,
+            (self.kernel_size, self.in_conv_dim),
+            stride=(1, self.in_conv_dim),
+            dilation=(self.dilation, 1),
+        )
+        hidden_states = tf.transpose(hidden_states, (0, 2, 1))
+        hidden_states = self.kernel(hidden_states)
+
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+@add_start_docstrings(
+    """
+    Wav2Vec2 Model with an XVector feature extraction head on top for tasks like Speaker Verification.
+    """,
+    WAV_2_VEC_2_START_DOCSTRING,
+)
+class TFWav2Vec2ForXVector(TFWav2Vec2PreTrainedModel):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+
+        self.config = config
+        self.wav2vec2 = TFWav2Vec2MainLayer(config, name="wav2vec2")
+        self.projector = tf.keras.layers.Dense(config.tdnn_dim[0], name="projector")
+
+        self.tdnn = [TFTDNNLayer(config, i, name=f"layer.{i}") for i in range(len(config.tdnn_dim))]
+
+        self.feature_extractor = tf.keras.layers.Dense(config.xvector_output_dim, name="feature_extractor")
+        self.classifier = tf.keras.layers.Dense(config.xvector_output_dim, name="classifier")
+        self.objective = TFAMSoftmaxLoss(config.xvector_output_dim, config.num_labels, name="objective")
+
+    def build(self, input_shape):
+        if self.config.use_weighted_layer_sum:
+            num_layers = self.config.num_hidden_layers + 1  # transformer layers + input embeddings
+            layer_weights = tf.ones(num_layers) / num_layers
+            self.layer_weights = self.add_weight(
+                shape=(self.config.num_hidden_layers + 1,),
+                trainable=True,  # FIXME
+                name="layer_weights",
+            )
+            self.layer_weights.assign(layer_weights)
+        return super().build(input_shape)
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.wav2vec2.feature_extractor.trainable = False
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        # FIXME
+        # for param in self.wav2vec2.parameters():
+        #     param.requires_grad = False
+
+    def _get_tdnn_output_lengths(self, input_lengths: Union[tf.Tensor, int]):
+        """
+        Computes the output length of the TDNN layers
+        """
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return (input_length - kernel_size) // stride + 1
+
+        for kernel_size in self.config.tdnn_kernel:
+            input_lengths = _conv_out_length(input_lengths, kernel_size, 1)
+
+        return input_lengths
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_TF_XVECTOR_CHECKPOINT,
+        output_type=TFXVectorOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+        expected_output=_TF_XVECTOR_EXPECTED_OUTPUT,
+    )
+    @unpack_inputs
+    def call(
+        self,
+        input_values: Optional[tf.Tensor],
+        attention_mask: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[tf.Tensor] = None,
+    ) -> Union[Tuple, TFXVectorOutput]:
+        r"""
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if self.config.use_weighted_layer_sum:
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = tf.stack(hidden_states, axis=1)
+            norm_weights = stable_softmax(self.layer_weights, axis=-1)
+            hidden_states = tf.reduce_sum(hidden_states * tf.reshape(norm_weights, (-1, 1, 1)), axis=1)
+        else:
+            hidden_states = outputs[0]
+
+        hidden_states = self.projector(hidden_states)
+
+        for tdnn_layer in self.tdnn:
+            hidden_states = tdnn_layer(hidden_states)
+
+        # Statistic Pooling
+        if attention_mask is None:
+            mean_features = tf.reduce_mean(hidden_states, axis=1)
+            std_features = tf.math.reduce_std(hidden_states, axis=1)
+        else:
+            feat_extract_output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(axis=1))
+            tdnn_output_lengths = self._get_tdnn_output_lengths(feat_extract_output_lengths)
+            mean_features = []
+            std_features = []
+            for i, length in enumerate(tdnn_output_lengths):
+                mean_features.append(tf.reduce_mean(hidden_states[i, :length], axis=0))
+                std_features.append(tf.math.reduce_std(hidden_states[i, :length], axis=0))
+            mean_features = tf.stack(mean_features)
+            std_features = tf.stack(std_features)
+        statistic_pooling = tf.concat([mean_features, std_features], axis=-1)
+
+        output_embeddings = self.feature_extractor(statistic_pooling)
+        logits = self.classifier(output_embeddings)
+
+        loss = None
+        if labels is not None:
+            loss = self.objective(logits, labels)
+
+        if not return_dict:
+            output = (logits, output_embeddings) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFXVectorOutput(
+            loss=loss,
+            logits=logits,
+            embeddings=output_embeddings,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )

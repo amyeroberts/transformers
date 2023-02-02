@@ -462,7 +462,7 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
     def _create_input_spec(self, input_shape):
 
         dim = input_shape[self.axis]
-        self.input_spec = tf.keras.layers.InputSpec(ndim=len(input_shape), axes={self.axis: dim})
+        self.input_spec = tf.keras.layers.InputSpec(naxis=len(input_shape), axes={self.axis: dim})
 
     def _add_gamma_weight(self, input_shape):
 
@@ -921,7 +921,7 @@ class TFHubertEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
         self.attention = TFHubertAttention(
-            embed_dim=config.hidden_size,
+            embed_axis=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=False,
@@ -965,7 +965,7 @@ class TFHubertEncoderLayerStableLayerNorm(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
         self.attention = TFHubertAttention(
-            embed_dim=config.hidden_size,
+            embed_axis=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=False,

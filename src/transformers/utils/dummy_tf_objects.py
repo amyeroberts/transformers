@@ -2515,7 +2515,35 @@ class TFViTMAEPreTrainedModel(metaclass=DummyObject):
 TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class TFWav2Vec2ForAudioFrameClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFWav2Vec2ForCTC(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFWav2Vec2ForPreTraining(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFWav2Vec2ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFWav2Vec2ForXVector(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

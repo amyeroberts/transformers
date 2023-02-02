@@ -949,3 +949,35 @@ class TFImageClassifierOutputWithNoAttention(ModelOutput):
     loss: Optional[tf.Tensor] = None
     logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
+
+
+@dataclass
+class TFXVectorOutput(ModelOutput):
+    """
+    Output type of [`TFWav2Vec2ForXVector`].
+
+    Args:
+        loss (`tf.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification loss.
+        logits (`tf.Tensor` of shape `(batch_size, config.xvector_output_dim)`):
+            Classification hidden states before AMSoftmax.
+        embeddings (`tf.Tensor` of shape `(batch_size, config.xvector_output_dim)`):
+            Utterance embeddings used for vector similarity-based retrieval.
+        hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[tf.Tensor] = None
+    logits: tf.Tensor = None
+    embeddings: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None

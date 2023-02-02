@@ -47,8 +47,17 @@ from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFWav2Vec2ForCTC, TFWav2Vec2Model, Wav2Vec2Processor
-    from transformers.models.wav2vec2.modeling_tf_wav2vec2 import _compute_mask_indices
+    from transformers import (
+        TFWav2Vec2ForAudioFrameClassification,
+        TFWav2Vec2ForCTC,
+        TFWav2Vec2ForPreTraining,
+        TFWav2Vec2ForSequenceClassification,
+        TFWav2Vec2ForXVector,
+        TFWav2Vec2Model,
+        Wav2Vec2FeatureExtractor,
+        Wav2Vec2Processor,
+    )
+    from transformers.models.wav2vec2.modeling_tf_wav2vec2 import _compute_mask_indices, _sample_negative_indices
 
 
 if is_pyctcdecode_available():
@@ -284,7 +293,18 @@ class TFWav2Vec2ModelTester:
 @require_tf
 class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (TFWav2Vec2Model, TFWav2Vec2ForCTC) if is_tf_available() else ()
+    all_model_classes = (
+        (
+            TFWav2Vec2ForCTC,
+            TFWav2Vec2Model,
+            TFWav2Vec2ForSequenceClassification,
+            TFWav2Vec2ForPreTraining,
+            TFWav2Vec2ForAudioFrameClassification,
+            TFWav2Vec2ForXVector,
+        )
+        if is_tf_available()
+        else ()
+    )
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False
@@ -401,7 +421,18 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
 
 @require_tf
 class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFWav2Vec2Model, TFWav2Vec2ForCTC) if is_tf_available() else ()
+    all_model_classes = (
+        (
+            TFWav2Vec2ForCTC,
+            TFWav2Vec2Model,
+            TFWav2Vec2ForSequenceClassification,
+            TFWav2Vec2ForPreTraining,
+            TFWav2Vec2ForAudioFrameClassification,
+            TFWav2Vec2ForXVector,
+        )
+        if is_tf_available()
+        else ()
+    )
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False
@@ -625,6 +656,285 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
+    def test_inference_integration(self):
+        model = TFWav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-base")
+        input_speech = self._load_datasamples(2)
+
+        inputs_dict = feature_extractor(input_speech, return_tensors="tf", padding=True)
+
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
+
+        np.random.seed(4)
+        mask_time_indices = _compute_mask_indices(
+            features_shape,
+            model.config.mask_time_prob,
+            model.config.mask_time_length,
+            min_masks=2,
+        )
+        mask_time_indices = tf.Tensor(mask_time_indices)
+
+        outputs = model(inputs_dict.input_values, mask_time_indices=mask_time_indices)
+
+        # compute cosine similarity
+        cosine_sim = tf.keras.losses.cosine_similarity(
+            outputs.projected_states, outputs.projected_quantized_states, axis=-1
+        )
+
+        # retrieve cosine sim of masked features
+        cosine_sim_masked = cosine_sim[mask_time_indices]
+
+        # cosine similarity of model is all > 0.5 as model is
+        # pre-trained on contrastive loss
+        # fmt: off
+        expected_cosine_sim_masked = tf.Tensor([
+            0.8523, 0.5860, 0.6905, 0.5557, 0.7456, 0.5249, 0.6639, 0.7654, 0.7565,
+            0.8167, 0.8222, 0.7960, 0.8034, 0.8166, 0.8310, 0.8263, 0.8274, 0.8258,
+            0.8179, 0.8412, 0.8536, 0.5098, 0.4728, 0.6461, 0.4498, 0.6002, 0.5774,
+            0.6457, 0.7123, 0.5668, 0.6866, 0.4960, 0.6293, 0.7423, 0.7419, 0.7526,
+            0.7768, 0.4898, 0.5393, 0.8183
+        ])
+        # fmt: on
+
+        self.assertTrue(np.allclose(cosine_sim_masked, expected_cosine_sim_masked, atol=1e-3))
+
+    def test_inference_pretrained(self):
+        model = TFWav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "facebook/wav2vec2-base", return_attention_mask=True
+        )
+        input_speech = self._load_datasamples(2)
+
+        inputs_dict = feature_extractor(input_speech, return_tensors="tf", padding=True)
+
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
+
+        # torch.manual_seed(0) # FIXME
+        mask_time_indices = _compute_mask_indices(
+            features_shape,
+            model.config.mask_time_prob,
+            model.config.mask_time_length,
+            min_masks=2,
+        )
+        mask_time_indices = tf.Tensor(mask_time_indices)
+
+        outputs = model(
+            inputs_dict.input_values,
+            attention_mask=inputs_dict.attention_mask,
+            mask_time_indices=mask_time_indices,
+        )
+
+        # compute cosine similarity
+        cosine_sim = tf.keras.losses.cosine_similarity(
+            outputs.projected_states, outputs.projected_quantized_states, axis=-1
+        )
+
+        # retrieve cosine sim of masked features
+        cosine_sim_masked = cosine_sim[mask_time_indices]
+
+        # ... now compare to randomly initialized model
+
+        config = Wav2Vec2Config.from_pretrained("facebook/wav2vec2-base")
+        model_rand = TFWav2Vec2ForPreTraining(config)
+        outputs_rand = model_rand(
+            inputs_dict.input_values,
+            attention_mask=inputs_dict.attention_mask,
+            mask_time_indices=mask_time_indices,
+        )
+
+        # compute cosine similarity
+        cosine_sim_rand = tf.keras.losses.cosine_similarity(
+            outputs_rand.projected_states, outputs_rand.projected_quantized_states, axis=-1
+        )
+
+        # retrieve cosine sim of masked features
+        cosine_sim_masked_rand = cosine_sim_rand[mask_time_indices]
+
+        # a pretrained wav2vec2 model has learned to predict the quantized latent states
+        # => the cosine similarity between quantized states and predicted states > 0.5
+        # a random wav2vec2 model has not learned to predict the quantized latent states
+        # => the cosine similarity between quantized states and predicted states is very likely < 0.1
+        self.assertTrue(tf.reduce_mean(cosine_sim_masked) - 5 * tf.reduce_mean(cosine_sim_masked_rand) > 0)
+
+    # @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU")
+    def test_loss_pretraining(self):
+        model = TFWav2Vec2ForPreTraining.from_pretrained(
+            "facebook/wav2vec2-base",
+            attention_dropout=0.0,
+            feat_proj_dropout=0.0,
+            hidden_dropout=0.0,
+            layerdrop=0.0,
+        )
+        # model.train()
+
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "facebook/wav2vec2-base", return_attention_mask=True
+        )
+        input_speech = self._load_datasamples(2)
+
+        inputs_dict = feature_extractor(input_speech, return_tensors="tf", padding=True)
+
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
+
+        # torch.manual_seed(0) # FIXME
+        np.random.seed(0)
+
+        mask_time_indices = _compute_mask_indices(
+            features_shape,
+            model.config.mask_time_prob,
+            model.config.mask_time_length,
+            min_masks=2,
+        )
+        sampled_negative_indices = _sample_negative_indices(
+            mask_time_indices.shape, model.config.num_negatives, mask_time_indices
+        )
+
+        mask_time_indices = tf.Tensor(mask_time_indices)
+        sampled_negative_indices = tf.Tensor(sampled_negative_indices)
+        outputs = model(
+            inputs_dict.input_values,
+            attention_mask=inputs_dict.attention_mask,
+            mask_time_indices=mask_time_indices,
+            sampled_negative_indices=sampled_negative_indices,
+        )
+
+        # check diversity loss
+        num_codevectors = model.config.num_codevectors_per_group * model.config.num_codevector_groups
+        diversity_loss = (num_codevectors - outputs.codevector_perplexity) / num_codevectors
+        self.assertTrue(abs(diversity_loss - 0.9538) < 1e-3)
+
+        # check overall loss (contrastive loss + diversity loss)
+        expected_loss = 116.7094
+
+        self.assertTrue(abs(outputs.loss - expected_loss) < 1e-3)
+
+    def test_inference_keyword_spotting(self):
+        model = TFWav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ks")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ks")
+        input_data = self._load_superb("ks", 4)
+        inputs = processor(input_data["speech"], return_tensors="tf", padding=True)
+
+        input_values = inputs.input_values
+        attention_mask = inputs.attention_mask
+        outputs = model(input_values, attention_mask=attention_mask)
+        predicted_logits, predicted_ids = tf.reduce_max(outputs.logits, axis=-1)
+
+        expected_labels = [7, 6, 10, 9]
+        # s3prl logits for the same batch
+        expected_logits = tf.Tensor([6.1186, 11.8961, 10.2931, 6.0898])
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertTrue(np.allclose(predicted_logits, expected_logits, atol=1e-2))
+
+    def test_inference_intent_classification(self):
+        model = TFWav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ic")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-ic")
+        input_data = self._load_superb("ic", 4)
+        inputs = processor(input_data["speech"], return_tensors="tf", padding=True)
+
+        input_values = inputs.input_values
+        attention_mask = inputs.attention_mask
+        outputs = model(input_values, attention_mask=attention_mask)
+
+        predicted_logits_action, predicted_ids_action = tf.reduce_max(outputs.logits[:, :6], axis=-1)
+        predicted_logits_object, predicted_ids_object = tf.reduce_max(outputs.logits[:, 6:20], axis=-1)
+        predicted_logits_location, predicted_ids_location = tf.reduce_max(outputs.logits[:, 20:24], axis=-1)
+
+        expected_labels_action = [0, 0, 2, 3]
+        expected_logits_action = tf.Tensor([0.4568, 11.0848, 1.6621, 9.3841])
+        expected_labels_object = [3, 10, 3, 4]
+        expected_logits_object = tf.Tensor([1.5322, 10.7094, 5.2469, 22.1318])
+        expected_labels_location = [0, 0, 0, 1]
+        expected_logits_location = tf.Tensor([1.5335, 6.5096, 10.5704, 11.0569])
+
+        self.assertListEqual(predicted_ids_action.tolist(), expected_labels_action)
+        self.assertListEqual(predicted_ids_object.tolist(), expected_labels_object)
+        self.assertListEqual(predicted_ids_location.tolist(), expected_labels_location)
+
+        self.assertTrue(np.allclose(predicted_logits_action, expected_logits_action, atol=1e-2))
+        self.assertTrue(np.allclose(predicted_logits_object, expected_logits_object, atol=1e-2))
+        self.assertTrue(np.allclose(predicted_logits_location, expected_logits_location, atol=1e-2))
+
+    def test_inference_speaker_identification(self):
+        model = TFWav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-sid")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-sid")
+        input_data = self._load_superb("si", 4)
+
+        output_logits = []
+        for example in input_data["speech"]:
+            input = processor(example, return_tensors="tf", padding=True)
+            output = model(input.input_values, attention_mask=None)
+            output_logits.append(output.logits[0])
+        output_logits = tf.stack(output_logits)
+        predicted_logits, predicted_ids = tf.reduce_max(output_logits, axis=-1)
+
+        expected_labels = [251, 1, 1, 3]
+        # s3prl logits for the same batch
+        expected_logits = tf.Tensor([37.5627, 71.6362, 64.2419, 31.7778])
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertTrue(np.allclose(predicted_logits, expected_logits, atol=1e-2))
+
+    def test_inference_emotion_recognition(self):
+        model = TFWav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-er")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/wav2vec2-base-superb-er")
+        input_data = self._load_superb("er", 4)
+        inputs = processor(input_data["speech"], return_tensors="tf", padding=True)
+
+        input_values = inputs.input_values
+        attention_mask = inputs.attention_mask
+        outputs = model(input_values, attention_mask=attention_mask)
+        predicted_logits, predicted_ids = tf.reduce_max(outputs.logits, axis=-1)
+
+        expected_labels = [1, 1, 2, 2]
+        # s3prl logits for the same batch
+        expected_logits = tf.Tensor([2.1722, 3.0779, 8.0287, 6.6797])
+
+        self.assertListEqual(predicted_ids.tolist(), expected_labels)
+        self.assertTrue(np.allclose(predicted_logits, expected_logits, atol=1e-2))
+
+    def test_phoneme_recognition(self):
+        model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+
+        input_speech = self._load_datasamples(4)
+
+        inputs = processor(input_speech, return_tensors="tf", padding=True)
+
+        input_values = inputs.input_values
+        attention_mask = inputs.attention_mask
+        logits = model(input_values, attention_mask=attention_mask).logits
+
+        predicted_ids = tf.argmax(logits, axis=-1)
+        predicted_trans = processor.batch_decode(predicted_ids)
+
+        EXPECTED_TRANSCRIPTIONS = [
+            "ɐ m æ n s ɛ d t ə ð ə j uː n ɪ v ɚ s s ɚ aɪ ɛ ɡ z ɪ s t",
+            "s w ɛ t k ʌ v ɚ d b ɹ iː ɔ n z b ɑː d i t ɹ ɪ k l ɪ ŋ ɪ n t ə ð ə t aɪ t l oɪ n k l ɑː θ ð æ w ʌ z ð ɪ oʊ"
+            " n l i ɡ ɑːɹ m ə n t h iː w ɔːɹ",
+            "ð ə k aɪ t ɔ n h ɪ z tʃ ɛ s t s t ɪ l d ɹ ɪ p ɪ ŋ b l ʌ d ð ɪ eɪ k ʌ v h ɪ z oʊ v ɚ s t ɹ eɪ n d aɪ z iː"
+            " v ə n ð ə s ɔːɹ ɹ ɪ ŋ ɐ ɹ iː n ɐ ɚ ɹ aʊ n d h ɪ m w ɪ ð ə θ aʊ z ə n d z ʌ v s p ɛ k t eɪ ɾ ɚ z w ɜː t ɹ"
+            " ɪ v ɪ æ l ᵻ ɾ i z n ɑː t w ɜː θ θ ɪ ŋ k ɪ ŋ ɐ b aʊ t",
+            "h ɪ z ɪ n s t ə n t v p æ n ɪ k w ʌ z f ɑː l oʊ d b aɪ ɐ s m ɔː l ʃ ɑːɹ p b l oʊ h aɪ ɔ n h ɪ z tʃ ɛ s t",
+        ]
+        # should correspond to =>:
+        # [
+        # "a man said to the universe sir i exist",
+        # "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
+        # "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around him with the thousands of spectators were trivialities not worth thinking about",
+        # "his instant panic was followed by a small sharp blow high on his chest",
+        # ]
+        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
     @require_pyctcdecode
     @require_librosa
     def test_wav2vec2_with_lm(self):
@@ -681,3 +991,53 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         run_test_in_subprocess(
             test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None, timeout=timeout
         )
+
+    def test_inference_diarization(self):
+        model = TFWav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-sd")
+        input_data = self._load_superb("sd", 4)
+        inputs = processor(input_data["speech"], return_tensors="tf", padding=True, sampling_rate=16_000)
+
+        input_values = inputs.input_values
+        attention_mask = inputs.attention_mask
+        outputs = model(input_values, attention_mask=attention_mask)
+        # labels is a one-hot array of shape (num_frames, num_speakers)
+        labels = tf.cast(outputs.logits > 0, tf.int64)
+
+        # s3prl logits for the same batch
+        expected_logits = tf.Tensor(
+            [
+                [[-5.2807, -5.1272], [-5.4059, -4.7757], [-5.2764, -4.9621], [-5.0117, -4.5851]],
+                [[-1.7643, -0.5462], [-1.7369, -0.2649], [-1.5066, -0.6200], [-4.5703, -2.4863]],
+                [[-0.8656, -0.4783], [-0.8899, -0.3289], [-0.9267, -0.5781], [-0.7817, -0.4619]],
+                [[-4.8625, -2.5316], [-5.2339, -2.2155], [-4.9835, -2.0344], [-4.4727, -1.8421]],
+            ],
+        )
+        self.assertEqual(labels[0, :, 0].sum(), 555)
+        self.assertEqual(labels[0, :, 1].sum(), 299)
+        # TODO: update the tolerance after the CI moves to torch 1.10
+        self.assertTrue(np.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
+
+    def test_inference_speaker_verification(self):
+        model = TFWav2Vec2ForXVector.from_pretrained("anton-l/wav2vec2-base-superb-sv")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-sv")
+        input_data = self._load_superb("si", 4)
+
+        inputs = processor(input_data["speech"], return_tensors="tf", padding=True, sampling_rate=16_000)
+        labels = tf.Tensor([[5], [1], [1], [3]])
+
+        input_values = inputs.input_values
+        attention_mask = inputs.attention_mask
+        outputs = model(input_values, attention_mask=attention_mask, labels=labels)
+        embeddings = tf.linalg.normalize(outputs.embeddings, ord=2, axis=-1)
+
+        cosine_sim = tf.keras.losses.CosineSimilarity()
+        # id10002 vs id10002
+        self.assertAlmostEqual(cosine_sim(embeddings[1], embeddings[2]).numpy(), 0.9758, 3)
+        # id10006 vs id10002
+        self.assertAlmostEqual(cosine_sim(embeddings[0], embeddings[1]).numpy(), 0.7579, 3)
+        # id10002 vs id10004
+        self.assertAlmostEqual(cosine_sim(embeddings[2], embeddings[3]).numpy(), 0.7594, 3)
+
+        # TODO: update the tolerance after the CI moves to torch 1.10
+        self.assertAlmostEqual(outputs.loss.item(), 17.7963, 2)

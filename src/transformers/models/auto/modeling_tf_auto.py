@@ -117,6 +117,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("tapas", "TFTapasForMaskedLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
         ("vit_mae", "TFViTMAEForPreTraining"),
+        ("wav2vec2", "TFWav2Vec2ForPreTraining"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
         ("xlnet", "TFXLNetLMHeadModel"),
@@ -413,6 +414,35 @@ TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Audio Classification mapping
+        ("wav2vec2", "TFWav2Vec2ForSequenceClassification"),
+    ]
+)
+
+TF_MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Connectionist temporal classification (CTC) mapping
+        ("wav2vec2", "TFWav2Vec2ForCTC"),
+    ]
+)
+
+TF_MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Audio Classification mapping
+        ("wav2vec2", "TFWav2Vec2ForAudioFrameClassification"),
+    ]
+)
+
+TF_MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Audio Classification mapping
+        ("wav2vec2", "TFWav2Vec2ForXVector"),
+    ]
+)
+
+
 TF_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_MAPPING_NAMES)
 TF_MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 TF_MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES)
@@ -455,6 +485,17 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = _LazyAutoMapping(
 TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES
 )
+TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES
+)
+TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
+)
+TF_MODEL_FOR_CTC_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_CTC_MAPPING_NAMES)
+TF_MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
+)
+TF_MODEL_FOR_AUDIO_XVECTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES)
 
 
 class TFAutoModel(_BaseAutoModelClass):
@@ -606,6 +647,38 @@ class TFAutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
 TFAutoModelForSpeechSeq2Seq = auto_class_update(
     TFAutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeling"
 )
+
+
+class TFAutoModelForAudioClassification(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+
+
+TFAutoModelForAudioClassification = auto_class_update(
+    TFAutoModelForAudioClassification, head_doc="audio classification"
+)
+
+
+class TFAutoModelForCTC(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_CTC_MAPPING
+
+
+TFAutoModelForCTC = auto_class_update(TFAutoModelForCTC, head_doc="connectionist temporal classification")
+
+
+class TFAutoModelForAudioFrameClassification(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING
+
+
+TFAutoModelForAudioFrameClassification = auto_class_update(
+    TFAutoModelForAudioFrameClassification, head_doc="audio frame (token) classification"
+)
+
+
+class TFAutoModelForAudioXVector(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_AUDIO_XVECTOR_MAPPING
+
+
+TFAutoModelForAudioXVector = auto_class_update(TFAutoModelForAudioXVector, head_doc="audio retrieval via x-vector")
 
 
 class TFAutoModelWithLMHead(_TFAutoModelWithLMHead):

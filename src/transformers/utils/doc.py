@@ -851,6 +851,100 @@ TF_SPEECH_CTC_SAMPLE = r"""
     ```
 """
 
+TF_SPEECH_SEQ_CLASS_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import AutoFeatureExtractor, {model_class}
+    >>> from datasets import load_dataset
+    >>> import tensorflow as tf
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> feature_extractor = AutoFeatureExtractor.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="tf")
+    >>> logits = model(**inputs).logits
+    >>> predicted_class_ids = tf.math.argmax(logits, axis=-1)
+    >>> predicted_label = model.config.id2label[predicted_class_ids]
+    >>> predicted_label
+    {expected_output}
+
+    >>> # compute loss - target_label is e.g. "down"
+    >>> target_label = model.config.id2label[0]
+    >>> inputs["labels"] = tf.Tensor([model.config.label2id[target_label]])
+    >>> loss = model(**inputs).loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
+    ```
+"""
+
+TF_SPEECH_FRAME_CLASS_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import AutoFeatureExtractor, {model_class}
+    >>> from datasets import load_dataset
+    >>> import tensorflow as tf
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> feature_extractor = AutoFeatureExtractor.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="tf", sampling_rate=sampling_rate)
+    >>> logits = model(**inputs).logits
+
+    >>> probabilities = tf.math.sigmoid(logits[0])
+    >>> # labels is a one-hot array of shape (num_frames, num_speakers)
+    >>> labels = tf.cast(probabilities > 0.5, tf.int64)
+    >>> labels[0].tolist()
+    {expected_output}
+    ```
+"""
+
+TF_SPEECH_XVECTOR_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import AutoFeatureExtractor, {model_class}
+    >>> from datasets import load_dataset
+    >>> import tensorflow as tf
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> feature_extractor = AutoFeatureExtractor.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = feature_extractor(
+    ...     [d["array"] for d in dataset[:2]["audio"]], sampling_rate=sampling_rate, return_tensors="tf", padding=True
+    ... )
+    >>> embeddings = model(**inputs).embeddings
+
+    >>> embeddings = tf.linalg.normalize(embeddings, ord=2, axis=-1)
+
+    >>> # the resulting embeddings can be used for cosine similarity-based retrieval
+    >>> cosine_sim = tf.keras.losses.CosineSimilarity()
+    >>> similarity = cosine_sim(embeddings[0], embeddings[1])
+    >>> threshold = 0.7  # the optimal threshold is dataset-dependent
+    >>> if similarity < threshold:
+    ...     print("Speakers are not the same!")
+    >>> round(similarity.item(), 2)
+    {expected_output}
+    ```
+"""
+
+
 TF_VISION_BASE_MODEL_SAMPLE = r"""
     Example:
 
@@ -907,6 +1001,9 @@ TF_SAMPLE_DOCSTRINGS = {
     "BaseModel": TF_BASE_MODEL_SAMPLE,
     "SpeechBaseModel": TF_SPEECH_BASE_MODEL_SAMPLE,
     "CTC": TF_SPEECH_CTC_SAMPLE,
+    "AudioClassification": TF_SPEECH_SEQ_CLASS_SAMPLE,
+    "AudioFrameClassification": TF_SPEECH_FRAME_CLASS_SAMPLE,
+    "AudioXVector": TF_SPEECH_XVECTOR_SAMPLE,
     "VisionBaseModel": TF_VISION_BASE_MODEL_SAMPLE,
     "ImageClassification": TF_VISION_SEQ_CLASS_SAMPLE,
 }
