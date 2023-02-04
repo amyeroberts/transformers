@@ -780,7 +780,7 @@ class GenerationTesterMixin:
                 forced_eos_token_id=model.config.forced_eos_token_id,
                 max_length=max_length,
             )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=2)
 
             # check `generate()` and `sample()` are equal
             output_sample, output_generate = self._sample_generate(
@@ -2034,59 +2034,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 **model_kwargs,
             )
 
-    def test_beam_search_warning_if_max_length_is_passed(self):
-        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
-        bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
-            torch_device
-        )
-
-        batch_size = 1
-        num_beams = 3
-
-        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-        input_ids = input_ids.expand(num_beams, -1)
-        model_kwargs = bart_model._prepare_encoder_decoder_kwargs_for_generation(input_ids, {})
-
-        # pretend decoder_input_ids correspond to first encoder input id
-        decoder_input_ids = input_ids[:, :1]
-
-        stopping_criteria_max_length = 18
-        stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=stopping_criteria_max_length)])
-
-        with self.assertWarns(UserWarning):
-            beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
-                num_beams=num_beams,
-                device=torch_device,
-                max_length=10,
-            )
-
-        generated_ids = bart_model.beam_search(
-            decoder_input_ids,
-            num_beams=num_beams,
-            stopping_criteria=stopping_criteria,
-            beam_scorer=beam_scorer,
-            **model_kwargs,
-        )
-
-        beam_scorer_no_max_len = BeamSearchScorer(
-            batch_size=batch_size,
-            num_beams=num_beams,
-            device=torch_device,
-        )
-
-        generated_ids_no_max_len = bart_model.beam_search(
-            decoder_input_ids,
-            num_beams=num_beams,
-            stopping_criteria=stopping_criteria,
-            beam_scorer=beam_scorer_no_max_len,
-            **model_kwargs,
-        )
-
-        # BeamSearchScorer max_length should not influence "real" max_length
-        self.assertEqual(generated_ids.tolist(), generated_ids_no_max_len.tolist())
-
     def test_custom_stopping_criteria_overload_error(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
@@ -2359,17 +2306,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(diff < 1e-4)
 
-    def test_decoder_generate_with_inputs_embeds(self):
-        article = """I need input_ids to generate"""
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=5).to(torch_device)
-        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-        inputs_embeds = model.get_input_embeddings()(input_ids)
-
-        # cannot generate from `inputs_embeds` for decoder only
-        with self.assertRaises(ValueError):
-            model.generate(inputs_embeds=inputs_embeds)
-
     def test_generate_input_ids_as_kwarg(self):
         article = """I need input_ids to generate"""
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -2417,8 +2353,10 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     def test_generate_too_many_encoder_kwargs(self):
         article = """I need input_ids to generate"""
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
+        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart", max_length=10).to(
+            torch_device
+        )
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
         with self.assertRaises(ValueError):
             model.generate(input_ids=input_ids, inputs_embeds=input_ids)
@@ -3128,3 +3066,26 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         eos_token_id = [873]
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
+
+    def test_generate_from_input_embeds_decoder_only(self):
+        # Note: the model must support generation from input embeddings
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        text = "Hello world"
+        input_ids = tokenizer.encode(text, return_tensors="pt")
+
+        # Traditional way of generating text
+        outputs_from_ids = model.generate(input_ids)
+
+        # Same thing, but from input embeddings
+        inputs_embeds = model.transformer.wte(input_ids)
+        outputs_from_embeds = model.generate(input_ids, inputs_embeds=inputs_embeds)
+        self.assertListEqual(outputs_from_ids.tolist(), outputs_from_embeds.tolist())
+
+        # But if we pass different inputs_embeds, we should get different outputs
+        torch.manual_seed(0)
+        random_embeds = torch.rand_like(inputs_embeds)
+        outputs_from_rand_embeds = model.generate(input_ids, inputs_embeds=random_embeds)
+        with self.assertRaises(AssertionError):
+            self.assertListEqual(outputs_from_rand_embeds.tolist(), outputs_from_embeds.tolist())
