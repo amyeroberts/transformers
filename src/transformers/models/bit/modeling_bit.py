@@ -844,25 +844,13 @@ class BitForImageClassification(BitPreTrainedModel):
 class BitBackbone(BitPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
-        self.stage_names = config.stage_names
         self.bit = BitModel(config)
-
-        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-
-        out_feature_channels = {}
-        out_feature_channels["stem"] = config.embedding_size
-        for idx, stage in enumerate(self.stage_names[1:]):
-            out_feature_channels[stage] = config.hidden_sizes[idx]
-
-        self.out_feature_channels = out_feature_channels
+        self.num_channels = [config.embedding_size] + config.hidden_sizes
 
         # initialize weights and apply final processing
         self.post_init()
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
 
     @add_start_docstrings_to_model_forward(BIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
@@ -894,7 +882,7 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.bit(pixel_values, output_hidden_states=True, return_dict=True)
+        outputs = self.model(pixel_values, output_hidden_states=True, return_dict=True)
 
         hidden_states = outputs.hidden_states
 
