@@ -88,6 +88,33 @@ class TFWav2Vec2BaseModelOutput(ModelOutput):
     attentions: Optional[Tuple[tf.Tensor]] = None
 
 
+def _check_for_deprecated_arguments(kwargs):
+    """
+    This function checks for deprecated arguments and raises a warning if they are used. These arguments we added in
+    the original implementation of the model, however they were never used.
+    """
+    if "attention_mask" in kwargs:
+        warnings.warn(
+            "The `attention_mask` argument is deprecated and will be removed in v4.29. It is not used by the model.",
+            FutureWarning,
+        )
+    if "output_attentions" in kwargs:
+        warnings.warn(
+            "The `output_attentions` argument is deprecated and will be removed in v4.29. It is not used by the model.",
+            FutureWarning,
+        )
+    if "output_hidden_states" in kwargs:
+        warnings.warn(
+            "The `output_hidden_states` argument is deprecated and will be removed in v4.29. It is not used by the model.",
+            FutureWarning,
+        )
+    if "return_dict" in kwargs:
+        warnings.warn(
+            "The `return_dict` argument is deprecated and will be removed in v4.29. It is not used by the model.",
+            FutureWarning,
+        )
+
+
 def _sample_without_replacement(distribution, num_samples):
     """
     Categorical sampling without replacement is currently not implemented. The gumbel-max trick will do for now - see
@@ -1123,18 +1150,26 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
         self,
         input_values: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        mask_time_indices: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs: Any,
     ):
+        _check_for_deprecated_arguments(kwargs)
+
+        if "mask_time_indices" in kwargs:
+            warnings.warn(
+                "Setting `mask_time_indices` in the kwargs is deprecated and will be removed in v4.28 of "
+                "Transformers, please use `mask_time_indices` argument instead.",
+                FutureWarning,
+            )
+            if mask_time_indices is not None:
+                raise ValueError("Cannot set both `mask_time_indices` and `kwargs['mask_time_indices']`")
+            mask_time_indices = kwargs.pop("mask_time_indices", None)
+
         extract_features = self.feature_extractor(tf.cast(input_values, tf.float32), training=training)
-        # extract_features = tf.transpose(extract_features, perm=(0, 2, 1))
 
         if attention_mask is not None:
             # compute real output lengths according to convolution formula
@@ -1203,7 +1238,6 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
             {
                 "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -1239,9 +1273,9 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 
     - a single Tensor with `input_values` only and nothing else: `model(input_values)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-    `model([input_values, attention_mask])` or `model([input_values, attention_mask, token_type_ids])`
+    `model([input_values, attention_mask])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-    `model({"input_values": input_values, "token_type_ids": token_type_ids})`
+    `model({"input_values": input_values, "attention_mask": attention_mask})`
 
     Note that when creating models and layers with
     [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
@@ -1271,29 +1305,6 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`np.ndarray` or `tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_values` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_values` indices into associated vectors
-            than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
@@ -1328,16 +1339,17 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         self,
         input_values: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        mask_time_indices: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
+        **kwargs,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         """
+        mask_time_indices (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
 
         Returns:
 
@@ -1364,6 +1376,17 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
         >>> hidden_states = model(input_values).last_hidden_state
         ```"""
+        _check_for_deprecated_arguments(kwargs)
+
+        if "mask_time_indices" in kwargs:
+            warnings.warn(
+                "Setting `mask_time_indices` in the kwargs is deprecated and will be removed in v4.28 of "
+                "Transformers, please use `mask_time_indices` argument instead.",
+                FutureWarning,
+            )
+            if mask_time_indices is not None:
+                raise ValueError("Cannot set both `mask_time_indices` and `kwargs['mask_time_indices']`")
+            mask_time_indices = kwargs.pop("mask_time_indices", None)
 
         output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
         output_attentions = output_attentions if output_attentions else self.config.output_attentions
@@ -1372,10 +1395,6 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         outputs = self.wav2vec2(
             input_values=input_values,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1434,15 +1453,12 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         self,
         input_values: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = None,
         labels: Optional[tf.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
+        **kwargs,
     ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1487,14 +1503,11 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
         >>> loss = model(input_values, labels=labels).loss
         ```"""
+        _check_for_deprecated_arguments(kwargs)
 
         outputs = self.wav2vec2(
             input_values=input_values,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
