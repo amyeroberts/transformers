@@ -55,7 +55,6 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "DetaEncoder",  # Building part of bigger (tested) model.
     "DetaDecoder",  # Building part of bigger (tested) model.
-    "ErnieMForInformationExtraction",
     "GraphormerEncoder",  # Building part of bigger (tested) model.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
@@ -179,7 +178,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Blip2ForConditionalGeneration",
     "Blip2QFormerModel",
     "Blip2VisionModel",
-    "ErnieMForInformationExtraction",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",

@@ -272,7 +272,6 @@ _import_structure = {
         "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ErnieConfig",
     ],
-    "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
@@ -646,7 +645,6 @@ else:
     _import_structure["models.camembert"].append("CamembertTokenizer")
     _import_structure["models.cpm"].append("CpmTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
-    _import_structure["models.ernie_m"].append("ErnieMTokenizer")
     _import_structure["models.fnet"].append("FNetTokenizer")
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
@@ -1487,18 +1485,6 @@ else:
             "ErnieForTokenClassification",
             "ErnieModel",
             "ErniePreTrainedModel",
-        ]
-    )
-    _import_structure["models.ernie_m"].extend(
-        [
-            "ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ErnieMForInformationExtraction",
-            "ErnieMForMultipleChoice",
-            "ErnieMForQuestionAnswering",
-            "ErnieMForSequenceClassification",
-            "ErnieMForTokenClassification",
-            "ErnieMModel",
-            "ErnieMPreTrainedModel",
         ]
     )
     _import_structure["models.esm"].extend(
@@ -3814,7 +3800,6 @@ if TYPE_CHECKING:
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
-    from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
@@ -4161,7 +4146,6 @@ if TYPE_CHECKING:
         from .models.camembert import CamembertTokenizer
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
-        from .models.ernie_m import ErnieMTokenizer
         from .models.fnet import FNetTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
@@ -4855,16 +4839,6 @@ if TYPE_CHECKING:
             ErnieForTokenClassification,
             ErnieModel,
             ErniePreTrainedModel,
-        )
-        from .models.ernie_m import (
-            ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ErnieMForInformationExtraction,
-            ErnieMForMultipleChoice,
-            ErnieMForQuestionAnswering,
-            ErnieMForSequenceClassification,
-            ErnieMForTokenClassification,
-            ErnieMModel,
-            ErnieMPreTrainedModel,
         )
         from .models.esm import (
             ESM_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -275,8 +275,6 @@
         title: Encoder Decoder Models
       - local: model_doc/ernie
         title: ERNIE
-      - local: model_doc/ernie_m
-        title: ErnieM
       - local: model_doc/esm
         title: ESM
       - local: model_doc/flan-t5
