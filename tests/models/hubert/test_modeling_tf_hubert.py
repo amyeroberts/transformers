@@ -321,12 +321,12 @@ class TFHubertModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFHubertModel.from_pretrained("facebook/hubert-base-ls960")
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Fix me! Hubert hits OOM errors when loss is computed on full batch")
+    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
     def test_dataset_conversion(self):
         # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
 
-    @unittest.skip(reason="Fix me! Hubert hits OOM errors when loss is computed on full batch")
+    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
     def test_keras_fit(self):
         # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
         pass
