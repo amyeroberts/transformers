@@ -362,7 +362,7 @@ def main():
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
-        trainer.log_metrics("train", train_result.metrics)
+        trainer.log_metrics("train", train_result.metrics)    
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
 
