@@ -18,12 +18,15 @@ import json
 import logging
 import os
 import sys
+import weakref
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
+from typing import Optional, List, Dict, Callable
 
 import numpy as np
 import tensorflow as tf
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
+from datasets.arrow_dataset import dataset_to_tf
 
 import transformers
 from transformers import (
@@ -224,6 +227,67 @@ def collate_fn(examples):
     return {"pixel_values": pixel_values}
 
 
+def prepare_tf_dataset(
+        dataset: Dataset,
+        collate_fn: Callable,
+        collate_fn_args: Optional[Dict] = None,
+        cols_to_retain: Optional[List[str]] = None,
+        batch_size: Optional[int] = None,
+        shuffle: bool = False,
+        drop_remainder: bool = False,
+        prefetch: bool = True,
+):
+    """
+    Helper function which constructs a TensorFlow dataset from a given dataset.
+
+    This is an adapted version of the `to_tf_dataset` method in the datasets library which
+    will return a dict instead of a tuple when there's no label and a single feature.
+    """
+
+    if collate_fn is None:
+        collate_fn = DefaultDataCollator(return_tensors="np")
+
+    collate_fn_args = collate_fn_args if collate_fn_args is not None else {}
+    if batch_size is not None:
+        batch_size = min(len(dataset), batch_size)
+
+    output_signature, columns_to_np_types = dataset._get_output_signature(
+        dataset,
+        collate_fn=collate_fn,
+        collate_fn_args=collate_fn_args,
+        cols_to_retain=cols_to_retain,
+        batch_size=batch_size,
+        num_test_batches=1
+    )
+
+    if cols_to_retain is None:
+        cols_to_retain = list(output_signature.keys())
+
+    tf_dataset = dataset_to_tf(
+        dataset,
+        cols_to_retain=cols_to_retain,
+        collate_fn=collate_fn,
+        collate_fn_args=collate_fn_args,
+        shuffle=shuffle,
+        batch_size=batch_size,
+        drop_remainder=drop_remainder,
+        output_signature=output_signature,
+        columns_to_np_types=columns_to_np_types
+    )
+
+    if prefetch:
+        tf_dataset = tf_dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    # Remove a reference to the open Arrow file on delete
+    def cleanup_callback(ref):
+        dataset.__del__()
+        dataset._TF_DATASET_REFS.remove(ref)
+
+    dataset._TF_DATASET_REFS.add(weakref.ref(tf_dataset, cleanup_callback))
+
+    return tf_dataset
+
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -235,6 +299,9 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if not (training_args.do_train or training_args.do_eval or training_args.do_predict):
+        exit("Must specify at least one of --do_train, --do_eval or --do_predict!")
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -259,6 +326,9 @@ def main():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
+
+    output_dir = Path(training_args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Detecting last checkpoint.
     checkpoint = None
@@ -406,8 +476,6 @@ def main():
             load_from_cache_file=not data_args.overwrite_cache,
         )
 
-    # collate_fn = DefaultDataCollator(return_tensors="np")
-
     # Compute absolute learning rate
     total_train_batch_size = (
         training_args.train_batch_size * training_args.gradient_accumulation_steps * training_args.world_size
@@ -460,39 +528,28 @@ def main():
                 weight_decay_rate=training_args.weight_decay,
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
-            # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
-            # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
-            # use the lower-level dataset.to_tf_dataset() method, but you will have to specify things like column names
-            # yourself if you use this method, whereas they are automatically inferred from the model input names when
-            # using model.prepare_tf_dataset()
-            # For more info see the docs:
-            # https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.TFPreTrainedModel.prepare_tf_dataset
-            # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
 
-            train_dataset = model.prepare_tf_dataset(
+            # Models for pretraining don't have labels and instead only pass in the pixel_values
+            # input to the model. We use a custom collate function to remove the labels and
+            # prepare_tf_dataset to create a tf.data.Dataset.
+            train_dataset = prepare_tf_dataset(
                 train_dataset,
                 shuffle=True,
                 batch_size=total_train_batch_size,
                 collate_fn=collate_fn,
+                drop_remainder=True,
             ).with_options(dataset_options)
         else:
             optimizer = None
 
         if training_args.do_eval:
-            eval_dataset = model.prepare_tf_dataset(
+            eval_dataset = prepare_tf_dataset(
                 eval_dataset,
                 shuffle=False,
                 batch_size=total_eval_batch_size,
                 collate_fn=collate_fn,
+                drop_remainder=True,
             ).with_options(dataset_options)
-
-        # if training_args.do_predict:
-        #     predict_dataset = model.prepare_tf_dataset(
-        #         predict_dataset,
-        #         shuffle=False,
-        #         batch_size=total_eval_batch_size,
-        #         collate_fn=collate_fn,
-        #     ).with_options(dataset_options)
 
         model.compile(optimizer=optimizer, jit_compile=training_args.xla, metrics=["accuracy"])
 
@@ -514,8 +571,6 @@ def main():
             model_card_kwargs["finetuned_from"] = model_path
 
         callbacks = []
-        # if eval_dataset is not None:
-            # callbacks.append(KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=eval_dataset))
         if training_args.push_to_hub:
             callbacks.append(
                 PushToHubCallback(
@@ -527,40 +582,26 @@ def main():
                 )
             )
 
-        # NOTE - fails here because
-        # when going through train_step, there are no passed in labels and no label_kwargs
-
         if training_args.do_train:
-            model.fit(
+            history = model.fit(
                 train_dataset,
                 validation_data=eval_dataset,
                 epochs=int(training_args.num_train_epochs),
                 callbacks=callbacks,
             )
 
+        eval_metrics = {}
         if training_args.do_eval:
             n_eval_batches = len(eval_dataset)
             eval_predictions = model.predict(eval_dataset, steps=n_eval_batches)
-            # eval_labels = dataset["validation"]["labels"][: n_eval_batches * total_eval_batch_size]
-            # eval_metrics = compute_metrics((eval_predictions.logits, eval_labels))
-            eval_metrics = model.loss
-            # logging.info("Eval metrics:")
-            # for metric_name, value in eval_metrics.items():
-            #     logging.info(f"{metric_name}: {value:.3f}")
+            eval_sample_loss = eval_predictions.loss
+            eval_metrics['avg_loss'] = eval_sample_loss.mean()
+            logging.info(f"Average loss: {eval_metrics['avg_loss']:.3f}")
 
         if training_args.output_dir is not None:
+            all_results = {f"eval_{k}": v for k, v in eval_metrics.items()}
             with open(os.path.join(training_args.output_dir, "all_results.json"), "w") as f:
-                f.write(json.dumps(eval_metrics))
-
-        # if training_args.do_predict:
-        #     n_predict_batches = len(predict_dataset)
-        #     test_predictions = model.predict(predict_dataset, steps=n_predict_batches)
-        #     # test_labels = dataset["validation"]["labels"][: n_predict_batches * total_eval_batch_size]
-        #     # test_metrics = compute_metrics((test_predictions.logits, test_labels))
-
-        #     logging.info("Test metrics:")
-        #     for metric_name, value in test_metrics.items():
-        #         logging.info(f"{metric_name}: {value:.3f}")
+                f.write(json.dumps(all_results))
 
         if training_args.output_dir is not None and not training_args.push_to_hub:
             # If we're not pushing to hub, at least save a local copy when we're done
