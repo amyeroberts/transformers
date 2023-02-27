@@ -13,14 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
-import warnings
-from typing import Optional, Union, Tuple
+from typing import Tuple, Union
 
-from ...modeling_utils import PreTrainedModel, BackboneMixin
-from ...modeling_outputs import BackboneOutput
-from ...utils import ExplicitEnum, requires_backends, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
+
+from ...modeling_outputs import BackboneOutput
+from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...utils import is_torch_available, requires_backends
 
 
 if is_torch_available():
@@ -61,10 +60,10 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
             features_only=features_only,
             in_chans=in_chans,
             out_indices=out_indices,
-            **kwargs
+            **kwargs,
         )
         self._return_layers = self._backbone.return_layers
-        self._all_layers = {layer['module']: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
+        self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
         super()._init_backbone(config)
 
     def _init_weights(self, module):
@@ -73,9 +72,13 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         """
         pass
 
-    def forward(self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None, **kwargs) -> Union[BackboneOutput, Tuple[Tensor, ...]]:
+    def forward(
+        self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None, **kwargs
+    ) -> Union[BackboneOutput, Tuple[Tensor, ...]]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         if output_attentions:

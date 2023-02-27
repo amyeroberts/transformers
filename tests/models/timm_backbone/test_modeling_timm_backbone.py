@@ -133,10 +133,6 @@ class TimmBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip("TimmBackbone doesn't support feed forward chunking")
-    def test_feed_forward_chunking(self):
-        pass
-
     @unittest.skip("TimmBackbone doesn't have num_hidden_layers attribute")
     def test_hidden_states_output(self):
         pass

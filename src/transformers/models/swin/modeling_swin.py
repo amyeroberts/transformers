@@ -1252,7 +1252,7 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
         self.num_channels = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
 
         # Add layer norms to hidden states of out_features
-        hidden_states_norms = {}
+        hidden_states_norms = dict()
         for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = nn.LayerNorm(num_channels)
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
