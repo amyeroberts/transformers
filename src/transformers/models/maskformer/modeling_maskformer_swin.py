@@ -856,7 +856,6 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
         if "stem" in self.out_features:
             raise ValueError("This backbone does not support 'stem' in the `out_features`.")
 
-        # FIXME - is this correct?
         self.num_channels = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
 
         self.model = MaskFormerSwinModel(config)
