@@ -232,11 +232,9 @@ class ModelTesterMixin:
         inputs_dict = copy.deepcopy(inputs_dict)
         if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
             inputs_dict = {
-                k: (
-                    v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
-                    if isinstance(v, torch.Tensor) and v.ndim > 1
-                    else v
-                )
+                k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+                if isinstance(v, torch.Tensor) and v.ndim > 1
+                else v
                 for k, v in inputs_dict.items()
             }
         elif model_class.__name__ in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES):
@@ -2662,71 +2660,6 @@ class ModelTesterMixin:
                         new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
                     else:
                         new_model_without_prefix(input_ids)
-
-
-# class BackboneModelTesterMixin:
-
-#     all_model_classes = ()
-#     has_attentions = True
-
-#     def test_backbone_attributes(self):
-#         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-#         for model_class in self.all_model_classes:
-#             if model_class.__name__ not in get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES):
-#                 continue
-
-#             with self.subTest(msg=f"Testing {model_class}"):
-#                 model = model_class(config)
-
-#                 self.assertTrue(hasattr(model, "backbone"))
-#                 self.assertTrue(hasattr(model, "config"))
-#                 self.assertTrue(hasattr(model, "out_indices"))
-#                 self.assertTrue(hasattr(model, "stage_names"))
-#                 self.assertTrue(hasattr(model, "out_features"))
-#                 self.assertTrue(hasattr(model, "channels"))
-#                 self.assertTrue(hasattr(model, "num_channels"))
-
-#     def test_backbone_outputs(self):
-#         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-#         for model_class in self.all_model_classes:
-#             self.assertTrue(model_class.__name__ not in get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES))
-
-#             with self.subTest(msg=f"Testing {model_class}"):
-#                 model = model_class(config)
-
-#                 outputs = model(**inputs_dict, output_hidden_states=True, output_attentions=True)
-#                 self.assertTrue(hasattr(outputs, "feature_maps"))
-#                 self.assertTrue(hasattr(outputs, "hidden_states"))
-#                 self.assertTrue(hasattr(outputs, "attentions"))
-
-#                 self.assertEqual(len(outputs.hidden_states), model.config.num_hidden_layers)
-#                 if self.has_attentions:
-#                     self.assertEqual(len(outputs.attentions), model.config.num_hidden_layers)
-
-#     def test_backbone_config(self):
-#         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-#         for model_class in self.all_model_classes:
-#             self.assertTrue(model_class.__name__ not in get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES))
-
-#             with self.subTest(msg=f"Testing {model_class}"):
-#                 model = model_class(config)
-
-#                 backbone_config = model.backbone.config
-#                 self.assertTrue(hasattr(backbone_config, "output_hidden_states"))
-#                 self.assertTrue(hasattr(backbone_config, "output_attentions"))
-#                 self.assertTrue(hasattr(backbone_config, "return_dict"))
-#                 self.assertTrue(hasattr(backbone_config, "backbone_name"))
-#                 self.assertTrue(hasattr(backbone_config, "stage_names"))
-
-#                 self.assertEqual(backbone_config.output_hidden_states, model.config.output_hidden_states)
-#                 self.assertEqual(backbone_config.output_attentions, model.config.output_attentions)
-#                 self.assertEqual(backbone_config.return_dict, model.config.return_dict)
-
-#     def test_backbone_creation():
-#         pass
 
 
 global_rng = random.Random()
