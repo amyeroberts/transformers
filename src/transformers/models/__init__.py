@@ -177,6 +177,7 @@ from . import (
     tapex,
     time_series_transformer,
     timesformer,
+    timm_backbone,
     trajectory_transformer,
     transfo_xl,
     trocr,
