@@ -516,6 +516,7 @@ MODELS_NOT_IN_README = [
     "Speech Encoder decoder",
     "Speech2Text",
     "Speech2Text2",
+    "TimmBackbone",
     "Vision Encoder decoder",
     "VisionTextDualEncoder",
 ]
