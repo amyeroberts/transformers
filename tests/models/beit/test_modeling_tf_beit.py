@@ -526,7 +526,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = TFBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
+        model = TFBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224", from_pt=True)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -540,12 +540,12 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
         expected_shape = tf.convert_to_tensor([1, 1000])
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = tf.convert_to_tensor([0.3277, -0.1395, 0.0911])
+        expected_slice = tf.convert_to_tensor([-1.2385, -1.0987, -1.0108])
 
         tf.debugging.assert_near(logits[0, :3], expected_slice, atol=1e-4)
 
-        expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
-        self.assertEqual(tf.nn.top_k(outputs.logits[0], 2).indices.numpy().tolist(), expected_top2)
+        expected_class_idx = 281
+        self.assertEqual(tf.math.argmax(logits, -1), expected_class_idx)
 
     @slow
     def test_inference_image_classification_head_imagenet_22k(self):
