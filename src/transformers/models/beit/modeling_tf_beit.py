@@ -957,6 +957,9 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
         training: Optional[bool] = False,
     ) -> Union[TFMaskedLMOutput, tuple]:
         r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
