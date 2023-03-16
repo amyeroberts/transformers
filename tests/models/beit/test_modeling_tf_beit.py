@@ -570,7 +570,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(logits[0, :3], expected_slice, atol=1e-4)
 
         expected_class_idx = 2396
-        self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
+        self.assertEqual(tf.math.argmax(logits, -1), expected_class_idx)
 
     @slow
     def test_inference_semantic_segmentation(self):
