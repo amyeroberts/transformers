@@ -148,7 +148,7 @@ class TFBeitEmbeddings(tf.keras.layers.Layer):
                 name="mask_token",
             )
         else:
-            self.use_mask_token = None
+            self.mask_token = None
 
         if self.config.use_absolute_position_embeddings:
             self.position_embeddings = self.add_weight(
