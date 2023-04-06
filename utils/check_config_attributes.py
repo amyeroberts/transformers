@@ -73,7 +73,21 @@ SPECIAL_CASES_TO_ALLOW = {
     "InformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate the feature size
     "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
+    # out_features and out_indices set in BackboneMixin
+    "BitConfig": ["out_features", "out_indices"],
+    # out_features and out_indices set in BackboneMixin
+    "ConvNextConfig": ["out_features", "out_indices"],
+    # out_features and out_indices set in BackboneMixin
+    "ConvNextV2Config": ["out_features", "out_indices"],
+    # out_features and out_indices set in BackboneMixin
+    "ResNetConfig": ["out_features", "out_indices"],
+    # out_features and out_indices set in BackboneMixin
+    "NatConfig": ["out_features", "out_indices"],
+    # out_features and out_indices set in BackboneMixin
+    "DinatConfig": ["out_features", "out_indices"],
 }
+
+
 
 # TODO (ydshieh): Check the failing cases, try to fix them or move some cases to the above block once we are sure
 SPECIAL_CASES_TO_ALLOW.update(
