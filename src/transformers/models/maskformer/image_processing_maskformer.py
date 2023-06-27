@@ -450,6 +450,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "size_divisibility" in kwargs:
             image_processor_dict["size_divisibility"] = kwargs.pop("size_divisibility")
+        if "reduce_labels" in kwargs:
+            image_processor_dict["reduce_labels"] = kwargs.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
     @property
@@ -550,7 +552,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         reduce_labels: bool = False,
         **kwargs,
     ):
-        reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
+        reduce_labels = reduce_labels if reduce_labels is not None else self.do_reduce_labels
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         return convert_segmentation_map_to_binary_masks(
             segmentation_map=segmentation_map,
@@ -818,7 +820,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         segmentation_maps: ImageInput = None,
         instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
         ignore_index: Optional[int] = None,
-        reduce_labels: bool = False,
+        do_reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
@@ -853,6 +855,15 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 dictionary with a global/dataset-level mapping or as a list of dictionaries (one per image), to map
                 instance ids in each image separately.
 
+            ignore_index (`int`, *optional*):
+                Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+                denoted with 0 (background) will be replaced with `ignore_index`.
+
+            do_reduce_labels (`bool`, *optional*, defaults to `False`):
+                Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where
+                0 is used for background, and background itself is not included in all classes of a dataset (e.g.
+                ADE20k). The background label will be replaced by `ignore_index`.
+
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
                 objects.
@@ -873,8 +884,19 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             warnings.warn(
                 "The `pad_and_return_pixel_mask` argument has no effect and will be removed in v4.27", FutureWarning
             )
+
+        if "reduce_labels" in kwargs:
+            warnings.warn(
+                "The `reduce_labels` argument is deprecated and will be removed in v4.33. Please use"
+                " `do_reduce_labels` instead.",
+                FutureWarning,
+            )
+            if do_reduce_labels is not None:
+                raise ValueError("Cannot set both `reduce_labels` and `do_reduce_labels`.")
+            do_reduce_labels = kwargs.pop("reduce_labels")
+
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
-        reduce_labels = self.do_reduce_labels if reduce_labels is None else reduce_labels
+        do_reduce_labels = self.do_reduce_labels if do_reduce_labels is None else do_reduce_labels
 
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
@@ -892,7 +914,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
                 masks, classes = self.convert_segmentation_map_to_binary_masks(
-                    segmentation_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels
+                    segmentation_map, instance_id, ignore_index=ignore_index, reduce_labels=do_reduce_labels
                 )
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future

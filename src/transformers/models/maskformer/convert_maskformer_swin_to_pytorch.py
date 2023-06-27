@@ -278,7 +278,7 @@ def convert_maskformer_checkpoint(
     else:
         ignore_index = 255
     reduce_labels = True if "ade" in model_name else False
-    feature_extractor = MaskFormerFeatureExtractor(ignore_index=ignore_index, reduce_labels=reduce_labels)
+    feature_extractor = MaskFormerFeatureExtractor(ignore_index=ignore_index, do_reduce_labels=reduce_labels)
 
     inputs = feature_extractor(image, return_tensors="pt")
 

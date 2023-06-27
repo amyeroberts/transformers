@@ -386,7 +386,7 @@ class MaskFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         instance_seg2, inst2class2 = get_instance_segmentation_and_mapping(annotation2)
 
         # create a image processor
-        image_processing = MaskFormerImageProcessor(reduce_labels=True, ignore_index=255, size=(512, 512))
+        image_processing = MaskFormerImageProcessor(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
         # prepare the images and annotations
         inputs = image_processing(
@@ -429,7 +429,7 @@ class MaskFormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         )
 
         # create a image processor
-        image_processing = MaskFormerImageProcessor(reduce_labels=True, ignore_index=255, size=(512, 512))
+        image_processing = MaskFormerImageProcessor(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
         # prepare the images and annotations
         inputs = image_processing(
