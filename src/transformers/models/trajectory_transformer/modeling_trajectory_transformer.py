@@ -486,30 +486,25 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TrajectoryTransformerModel
+        >>> import numpy as np
         >>> import torch
+        >>> from transformers import TrajectoryTransformerModel
 
         >>> model = TrajectoryTransformerModel.from_pretrained(
         ...     "CarlCochet/trajectory-transformer-halfcheetah-medium-v2"
         ... )
-        >>> model.to(device)
         >>> model.eval()
 
         >>> observations_dim, action_dim, batch_size = 17, 6, 256
         >>> seq_length = observations_dim + action_dim + 1
 
-        >>> trajectories = torch.LongTensor([np.random.permutation(self.seq_length) for _ in range(batch_size)]).to(
-        ...     device
-        ... )
-        >>> targets = torch.LongTensor([np.random.permutation(self.seq_length) for _ in range(batch_size)]).to(device)
+        >>> trajectories = torch.LongTensor([np.random.permutation(seq_length) for _ in range(batch_size)])
+        >>> targets = torch.LongTensor([np.random.permutation(seq_length) for _ in range(batch_size)])
 
         >>> outputs = model(
         ...     trajectories,
         ...     targets=targets,
         ...     use_cache=True,
-        ...     output_attentions=True,
-        ...     output_hidden_states=True,
-        ...     return_dict=True,
         ... )
         ```
         """
@@ -520,6 +515,9 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
 
         if past_key_values is None:
             past_key_values = tuple([None] * len(self.blocks))
+
+        if attention_mask is None:
+            attention_mask = torch.ones_like(trajectories)
 
         batch_size, sequence_length = trajectories.size()
 

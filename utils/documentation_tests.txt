@@ -417,6 +417,7 @@ src/transformers/models/time_series_transformer/modeling_time_series_transformer
 src/transformers/models/timesformer/configuration_timesformer.py
 src/transformers/models/timesformer/modeling_timesformer.py
 src/transformers/models/trajectory_transformer/configuration_trajectory_transformer.py
+src/transformers/models/trajectory_transformer/modeling_trajectory_transformer.py
 src/transformers/models/transfo_xl/configuration_transfo_xl.py
 src/transformers/models/transfo_xl/tokenization_transfo_xl.py
 src/transformers/models/trocr/configuration_trocr.py
