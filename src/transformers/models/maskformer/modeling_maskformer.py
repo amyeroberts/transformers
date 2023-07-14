@@ -909,6 +909,10 @@ class MaskFormerHungarianMatcher(nn.Module):
             cost_dice = pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
+            # Clamp the cost matrix to avoid numerical instabilities
+            max_dtype = torch.finfo(cost_matrix.dtype).max
+            clamp_value = torch.where(torch.isinf(cost_matrix).any(), max_dtype - 1000, max_dtype)
+            cost_matrix = torch.clamp(cost_matrix, min=-clamp_value, max=clamp_value)
             # do the assigmented using the hungarian algorithm in scipy
             assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)

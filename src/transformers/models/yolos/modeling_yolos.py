@@ -1206,6 +1206,11 @@ class YolosHungarianMatcher(nn.Module):
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
+        # Clamp the cost matrix to avoid numerical instabilities
+        max_dtype = torch.finfo(cost_matrix.dtype).max
+        clamp_value = torch.where(torch.isinf(cost_matrix).any(), max_dtype - 1000, max_dtype)
+        cost_matrix = torch.clamp(cost_matrix, min=-clamp_value, max=clamp_value)
+
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
