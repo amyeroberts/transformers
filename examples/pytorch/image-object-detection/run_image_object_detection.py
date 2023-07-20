@@ -25,9 +25,8 @@ from PIL import Image
 from torchvision.transforms.v2 import (
     CenterCrop,
     Compose,
+    ConvertBoundingBoxFormat,
     Normalize,
-    RandomHorizontalFlip,
-    RandomResizedCrop,
     Resize,
     ToTensor,
 )
@@ -256,7 +255,7 @@ def main():
 
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
-    labels = dataset['train'].info.features['objects'].feature['category'].names
+    labels = dataset["train"].info.features["objects"].feature["category"].names
     label2id, id2label = {}, {}
     for i, label in enumerate(labels):
         label2id[label] = str(i)
@@ -297,8 +296,10 @@ def main():
     _train_transforms = Compose(
         [
             # ToTensor(),
-            RandomResizedCrop(size),
-            RandomHorizontalFlip(),
+            # RandomResizedCrop(size),
+            # RandomHorizontalFlip(),
+            Resize(size),
+            CenterCrop(size),
             ToTensor(),
             normalize,
         ]
@@ -328,10 +329,23 @@ def main():
         bboxes = [obj["bbox"] for obj in example_batch["objects"]]
         labels = [obj["category"] for obj in example_batch["objects"]]
         # FIxME - double check format
-        bboxes = [datapoints.BoundingBox(bbox, format=datapoints.BoundingBoxFormat.XYWH, spatial_size=F.get_spatial_size(img)) for img, bbox in zip(pil_images, bboxes)]
+        bboxes = [
+            datapoints.BoundingBox(
+                bbox, format=datapoints.BoundingBoxFormat.XYXY, spatial_size=F.get_spatial_size(img)
+            )
+            for img, bbox in zip(pil_images, bboxes)
+        ]
+        bboxes = [ConvertBoundingBoxFormat(datapoints.BoundingBoxFormat.CXCYWH)(bbox) for bbox in bboxes]
 
-        for pil_img, bbox, label in zip(pil_images, bboxes, labels):
-            pixel_values, bbox, label = _train_transforms(pil_img, bbox, label)
+        for pil_img, img_bboxes, label in zip(pil_images, bboxes, labels):
+            pixel_values, img_bboxes, label = _train_transforms(pil_img, img_bboxes, label)
+            # Convert the bbox to relative coordinates
+            # We can assume all the images as the same dimensiona after transformation because they are now batched.
+            bbox, (bbox_height, bbox_width) = img_bboxes.data, img_bboxes.spatial_size
+            bbox[:, 0] = bbox[:, 0] / bbox_width
+            bbox[:, 1] = bbox[:, 1] / bbox_height
+            bbox[:, 2] = bbox[:, 2] / bbox_width
+            bbox[:, 3] = bbox[:, 3] / bbox_height
             batch_pixel_values.append(pixel_values)
             batch_bboxes.append(bbox)
             batch_labels.append(label)
@@ -358,10 +372,23 @@ def main():
         bboxes = [obj["bbox"] for obj in example_batch["objects"]]
         labels = [obj["category"] for obj in example_batch["objects"]]
         # FIxME - double check format
-        bboxes = [datapoints.BoundingBox(bbox, format=datapoints.BoundingBoxFormat.XYWH, spatial_size=F.get_spatial_size(img)) for img, bbox in zip(pil_images, bboxes)]
+        bboxes = [
+            datapoints.BoundingBox(
+                bbox, format=datapoints.BoundingBoxFormat.XYXY, spatial_size=F.get_spatial_size(img)
+            )
+            for img, bbox in zip(pil_images, bboxes)
+        ]
+        bboxes = [ConvertBoundingBoxFormat(datapoints.BoundingBoxFormat.CXCYWH)(bbox) for bbox in bboxes]
 
-        for pil_img, bbox, label in zip(pil_images, bboxes, labels):
-            pixel_values, bbox, label = _val_transforms(pil_img, bbox, label)
+        for pil_img, img_bboxes, label in zip(pil_images, bboxes, labels):
+            pixel_values, img_bboxes, label = _train_transforms(pil_img, img_bboxes, label)
+            # Convert the bbox to relative coordinates
+            # We can assume all the images as the same dimensiona after transformation because they are now batched.
+            bbox, (bbox_height, bbox_width) = img_bboxes.data, img_bboxes.spatial_size
+            bbox[:, 0] = bbox[:, 0] / bbox_width
+            bbox[:, 1] = bbox[:, 1] / bbox_height
+            bbox[:, 2] = bbox[:, 2] / bbox_width
+            bbox[:, 3] = bbox[:, 3] / bbox_height
             batch_pixel_values.append(pixel_values)
             batch_bboxes.append(bbox)
             batch_labels.append(label)
