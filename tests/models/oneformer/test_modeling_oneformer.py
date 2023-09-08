@@ -110,7 +110,10 @@ class OneFormerModelTester:
         mask_labels = (
             torch.rand([self.batch_size, self.num_labels, self.min_size, self.max_size], device=torch_device) > 0.5
         ).float()
-        class_labels = (torch.rand((self.batch_size, self.num_labels), device=torch_device) > 0.5).long()
+        # class_labels = (torch.rand((self.batch_size, self.num_labels), device=torch_device) > 0.5).long()
+        class_labels = (
+            torch.randint(0, self.num_labels, (self.batch_size, self.num_labels), device=torch_device)
+        ).long()
 
         config = self.get_config()
         return config, pixel_values, task_inputs, text_inputs, pixel_mask, mask_labels, class_labels
@@ -555,17 +558,22 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             _ = model(**inputs)
 
     def test_with_segmentation_maps_and_loss(self):
-        dummy_model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
-        processor = self.default_processor
-        processor.image_processor.num_text = dummy_model.config.num_queries - dummy_model.config.text_encoder_n_ctx
-        dummy_model.config.is_training = True
-        model = OneFormerForUniversalSegmentation(dummy_model.config).to(torch_device).eval()
-        del dummy_model
+        config = OneFormerConfig.from_pretrained(self.model_checkpoints)
+        config.is_training = True
 
+        processor = self.default_processor
+        processor.image_processor.num_text = config.num_queries - config.text_encoder_n_ctx
+
+        model = OneFormerForUniversalSegmentation(config).to(torch_device).eval()
+
+        num_labels = model.config.num_labels
         inputs = processor(
             [np.zeros((3, 512, 640)), np.zeros((3, 512, 640))],
             ["semantic", "semantic"],
-            segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
+            segmentation_maps=[
+                np.random.randint(0, num_labels, (384, 384)),
+                np.random.randint(0, num_labels, (384, 384)),
+            ],
             return_tensors="pt",
         )
 
