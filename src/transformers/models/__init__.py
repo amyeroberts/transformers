@@ -101,6 +101,7 @@ from . import (
     gptj,
     gptsan_japanese,
     graphormer,
+    graphcast,
     groupvit,
     herbert,
     hubert,

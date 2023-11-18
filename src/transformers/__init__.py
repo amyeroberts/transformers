@@ -370,6 +370,7 @@ _import_structure = {
         "GPTSanJapaneseTokenizer",
     ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
+    "models.graphcast": ["GRAPHCAST_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphCastConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -1989,6 +1990,13 @@ else:
             "GraphormerForGraphClassification",
             "GraphormerModel",
             "GraphormerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.graphcast"].extend(
+        [
+            "GRAPHCAST_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GraphCastModel",
+            "GraphCastPreTrainedModel",
         ]
     )
     _import_structure["models.groupvit"].extend(
@@ -4584,6 +4592,7 @@ if TYPE_CHECKING:
         GPTSanJapaneseTokenizer,
     )
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
+    from .models.graphcast import GRAPHCAST_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphCastConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
@@ -5985,6 +5994,11 @@ if TYPE_CHECKING:
             GraphormerForGraphClassification,
             GraphormerModel,
             GraphormerPreTrainedModel,
+        )
+        from .models.graphcast import (
+            GRAPHCAST_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GraphCastModel,
+            GraphCastPreTrainedModel,
         )
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
