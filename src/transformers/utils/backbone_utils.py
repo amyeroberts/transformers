@@ -17,7 +17,9 @@
 
 import enum
 import inspect
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union, Dict, Any
+
+from ..configuration_utils import PretrainedConfig
 
 
 class BackboneType(enum.Enum):
@@ -234,6 +236,50 @@ class BackboneConfigMixin:
     A Mixin to support handling the `out_features` and `out_indices` attributes for the backbone configurations.
     """
 
+    # @classmethod
+    def from_dict(self, config_dict: Dict[str, Any], **kwargs):
+        """
+        We override the default `from_dict()` from `PretrainedConfig` to verify the out_features and out_indices.
+
+        This method first verifies the arguments are mutually compatible before calling the default `from_dict()`.
+        """
+        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+
+        # We pop the out_features and out_indices from the kwargs before passing to the default `from_dict()`
+        # so that we can verify them before setting them in the config.
+        # from_dict sets attributes consecutively, which can lead to an incompatible pair being set with one
+        # overriding the other.
+        kwarg_out_indices = kwargs.pop("out_indices", None)
+        kwarg_out_features = kwargs.pop("out_features", None)
+
+        # If out_features or out_indices are passed in as kwargs and not part of the config_dict (checkpoint was
+        # saved before a backbone class was added) then we need to instantiate a config to get the stage_names and
+        # then use that to verify the out_features and out_indices.
+        # config, unused_kwargs = PretrainedConfig.from_dict(config_dict, **kwargs, return_unused_kwargs=True)
+        # config, unused_kwargs = PretrainedConfig.from_dict(config_dict, **kwargs, return_unused_kwargs=True)
+        config, unused_kwargs = super().from_dict(config_dict, **kwargs, return_unused_kwargs=True)
+
+        import pdb; pdb.set_trace()
+
+        if kwarg_out_indices is not None or kwarg_out_features is not None:
+            # Instantiate a class without the out_features and out_indices first so that we can get the
+            # stage names for running a verification
+            _placeholder_config = cls(**config.to_dict(), **kwargs)
+
+            # Verify and get the compatible out_features and out_indices if one of them is not set
+            out_features, _ = get_aligned_output_features_output_indices(
+                out_features=kwarg_out_features,
+                out_indices=kwarg_out_indices,
+                stage_names=_placeholder_config.stage_names
+            )
+            # Just set one of the out_features or out_indices to the config
+            config.stage_names = _placeholder_config.pop("stage_names")
+            config.out_features = out_features
+
+        if return_unused_kwargs:
+            return config, unused_kwargs
+        return config
+
     @property
     def out_features(self):
         return self._out_features
@@ -243,6 +289,7 @@ class BackboneConfigMixin:
         """
         Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
         """
+        # import pdb; pdb.set_trace()
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=None, stage_names=self.stage_names
         )
@@ -256,6 +303,7 @@ class BackboneConfigMixin:
         """
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
+        # import pdb; pdb.set_trace()
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=None, out_indices=out_indices, stage_names=self.stage_names
         )

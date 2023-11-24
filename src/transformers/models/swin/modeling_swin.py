@@ -1253,6 +1253,7 @@ class SwinForImageClassification(SwinPreTrainedModel):
 )
 class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
     def __init__(self, config: SwinConfig):
+        # import pdb; pdb.set_trace()
         super().__init__(config)
         super()._init_backbone(config)
 

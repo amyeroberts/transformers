@@ -523,6 +523,7 @@ class _BaseAutoModelClass:
             if kwargs.get("quantization_config", None) is not None:
                 _ = kwargs.pop("quantization_config")
 
+            import pdb; pdb.set_trace()
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
                 return_unused_kwargs=True,
@@ -628,9 +629,16 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         if kwargs.get("use_timm_backbone", False):
-            return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+            # return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+            model = cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        # return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        # For transformers models we need to set the out_features and out_indices after instantiating the model
+        # because .... ?
+        # out_indices = kwargs.pop("out_indices", None)
+        # out_features = kwargs.pop("out_features", None)
+        model = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        # model.config.out_indices = out_indices
 
 
 def insert_head_doc(docstring, head_doc=""):

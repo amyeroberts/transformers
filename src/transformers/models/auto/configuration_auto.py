@@ -1037,6 +1037,7 @@ class AutoConfig:
         >>> unused_kwargs
         {'foo': False}
         ```"""
+        # import pdb; pdb.set_trace()
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
             warnings.warn(
@@ -1070,6 +1071,7 @@ class AutoConfig:
                 config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
+            # import pdb; pdb.set_trace()
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
             return config_class.from_dict(config_dict, **unused_kwargs)
         else:

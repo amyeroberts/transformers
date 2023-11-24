@@ -616,6 +616,7 @@ class PretrainedConfig(PushToHubMixin):
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
+        # import pdb; pdb.set_trace()
         cls._set_token_in_kwargs(kwargs)
 
         original_kwargs = copy.deepcopy(kwargs)
@@ -649,6 +650,8 @@ class PretrainedConfig(PushToHubMixin):
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
+
+        # import pdb; pdb.set_trace()
 
         if trust_remote_code is True:
             logger.warning(

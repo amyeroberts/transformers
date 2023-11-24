@@ -2595,6 +2595,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
+        # import pdb; pdb.set_trace()
+
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
 
