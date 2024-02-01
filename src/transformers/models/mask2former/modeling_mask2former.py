@@ -2285,7 +2285,11 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         )
 
         if not return_dict:
-            output = tuple(v for v in output.values() if v is not None)
+            tuple_output = tuple()
+            for value in output.values():
+                if value is not None:
+                    tuple_output += (value,)
+            return tuple_output
 
         return output
 
@@ -2538,7 +2542,10 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         )
 
         if not return_dict:
-            output = tuple(v for v in output.values() if v is not None)
-            if loss is not None:
-                output = (loss) + output
+            # output = tuple(v for v in output.values() if v is not None)
+            tuple_output = ()
+            for value in (loss, output.values()):
+                if value is not None:
+                    tuple_output += (value,)
+            output = tuple_output
         return output

@@ -214,7 +214,7 @@ class SwinImageClassifierOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
-def window_partition(input_feature, window_size):
+def window_partition(input_feature, window_size: int):
     """
     Partitions the given input into windows.
     """
@@ -226,7 +226,7 @@ def window_partition(input_feature, window_size):
     return windows
 
 
-def window_reverse(windows, window_size, height, width):
+def window_reverse(windows, window_size: int, height: int, width: int):
     """
     Merges windows to produce higher resolution features.
     """
@@ -258,13 +258,13 @@ class SwinEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor], bool_masked_pos: Optional[torch.BoolTensor] = None
-    ) -> Tuple[torch.Tensor]:
+        self, pixel_values: torch.FloatTensor, bool_masked_pos: Optional[torch.BoolTensor] = None
+    ) -> Tuple[torch.Tensor, Tuple[int, int]]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
         batch_size, seq_len, _ = embeddings.size()
 
-        if bool_masked_pos is not None:
+        if bool_masked_pos is not None and self.mask_token is not None:
             mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
             # replace the masked visual tokens by mask_tokens
             mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
@@ -293,23 +293,23 @@ class SwinPatchEmbeddings(nn.Module):
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
-        self.patch_size = patch_size
+        self.patch_size = patch_size.tolist() if isinstance(patch_size, torch.Tensor) else patch_size
         self.num_channels = num_channels
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def maybe_pad(self, pixel_values, height, width):
+    def maybe_pad(self, pixel_values, height: int, width: int):
         if width % self.patch_size[1] != 0:
-            pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
+            pad_values = [0, int(self.patch_size[1] - width % self.patch_size[1])]
             pixel_values = nn.functional.pad(pixel_values, pad_values)
         if height % self.patch_size[0] != 0:
-            pad_values = (0, 0, 0, self.patch_size[0] - height % self.patch_size[0])
+            pad_values = [0, 0, 0, int(self.patch_size[0] - height % self.patch_size[0])]
             pixel_values = nn.functional.pad(pixel_values, pad_values)
         return pixel_values
 
-    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
+    def forward(self, pixel_values) -> Tuple[torch.Tensor, Tuple[int, int]]:
         _, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -345,10 +345,10 @@ class SwinPatchMerging(nn.Module):
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
-    def maybe_pad(self, input_feature, height, width):
+    def maybe_pad(self, input_feature, height: int, width: int):
         should_pad = (height % 2 == 1) or (width % 2 == 1)
         if should_pad:
-            pad_values = (0, 0, 0, width % 2, 0, height % 2)
+            pad_values = (0, 0, 0, int(width % 2), 0, int(height % 2))
             input_feature = nn.functional.pad(input_feature, pad_values)
 
         return input_feature
@@ -463,8 +463,8 @@ class SwinSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+        output_attentions: bool = False,
+    ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]]]:
         batch_size, dim, num_channels = hidden_states.shape
         mixed_query_layer = self.query(hidden_states)
 
@@ -510,7 +510,7 @@ class SwinSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer, None)
 
         return outputs
 
@@ -558,11 +558,16 @@ class SwinAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+
+        # Fixme output attentions will already be None
+        if output_attentions:
+            outputs = (attention_output, self_outputs[1])  # add attentions if we output them
+        else:
+            outputs = (attention_output, None)
         return outputs
 
 
@@ -607,30 +612,30 @@ class SwinLayer(nn.Module):
         self.intermediate = SwinIntermediate(config, dim)
         self.output = SwinOutput(config, dim)
 
-    def set_shift_and_window_size(self, input_resolution):
+    def set_shift_and_window_size(self, input_resolution: Tuple[int, int]):
         if min(input_resolution) <= self.window_size:
             # if window size is larger than input resolution, we don't partition windows
             self.shift_size = 0
             self.window_size = min(input_resolution)
 
-    def get_attn_mask(self, height, width, dtype):
+    def get_attn_mask(self, height: int, width: int, dtype: torch.dtype):
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
             img_mask = torch.zeros((1, height, width, 1), dtype=dtype)
             height_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
+                (0, -self.window_size),
+                (-self.window_size, -self.shift_size),
+                (-self.shift_size, None),
             )
             width_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
+                (0, -self.window_size),
+                (-self.window_size, -self.shift_size),
+                (-self.shift_size, None),
             )
             count = 0
-            for height_slice in height_slices:
-                for width_slice in width_slices:
-                    img_mask[:, height_slice, width_slice, :] = count
+            for (start_h, stop_h) in height_slices:
+                for (start_w, stop_w) in width_slices:
+                    img_mask[:, start_h:stop_h, start_w:stop_w, :] = count
                     count += 1
 
             mask_windows = window_partition(img_mask, self.window_size)
@@ -641,10 +646,10 @@ class SwinLayer(nn.Module):
             attn_mask = None
         return attn_mask
 
-    def maybe_pad(self, hidden_states, height, width):
+    def maybe_pad(self, hidden_states, height: int, width: int):
         pad_right = (self.window_size - width % self.window_size) % self.window_size
         pad_bottom = (self.window_size - height % self.window_size) % self.window_size
-        pad_values = (0, 0, 0, pad_right, 0, pad_bottom)
+        pad_values = (0, 0, 0, int(pad_right), 0, int(pad_bottom))
         hidden_states = nn.functional.pad(hidden_states, pad_values)
         return hidden_states, pad_values
 
@@ -653,9 +658,9 @@ class SwinLayer(nn.Module):
         hidden_states: torch.Tensor,
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        always_partition: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        output_attentions: bool = False,
+        always_partition: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         if not always_partition:
             self.set_shift_and_window_size(input_dimensions)
         else:
@@ -712,7 +717,7 @@ class SwinLayer(nn.Module):
         layer_output = self.intermediate(layer_output)
         layer_output = hidden_states + self.output(layer_output)
 
-        layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
+        layer_outputs = (layer_output, attention_outputs[1]) #if output_attentions else (layer_output,)
         return layer_outputs
 
 
@@ -747,9 +752,9 @@ class SwinStage(nn.Module):
         hidden_states: torch.Tensor,
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        always_partition: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+        output_attentions: bool = False,
+        always_partition: bool = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor, Tuple[int, int, int, int], Tuple[Optional[torch.Tensor]]]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
             layer_head_mask = head_mask[i] if head_mask is not None else None
@@ -768,10 +773,10 @@ class SwinStage(nn.Module):
         else:
             output_dimensions = (height, width, height, width)
 
-        stage_outputs = (hidden_states, hidden_states_before_downsampling, output_dimensions)
+        stage_outputs = (hidden_states, hidden_states_before_downsampling, output_dimensions, layer_outputs[1:])
 
-        if output_attentions:
-            stage_outputs += layer_outputs[1:]
+        # if output_attentions:
+            # stage_outputs += layer_outputs[1:]
         return stage_outputs
 
 
@@ -808,7 +813,7 @@ class SwinEncoder(nn.Module):
         output_hidden_states_before_downsampling: Optional[bool] = False,
         always_partition: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, SwinEncoderOutput]:
+    ) -> Union[Tuple[torch.Tensor], SwinEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -866,7 +871,11 @@ class SwinEncoder(nn.Module):
                 all_self_attentions += layer_outputs[3:]
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            output = tuple()
+            for value in [hidden_states, all_hidden_states, all_self_attentions]:
+                if value is not None:
+                    output += (value,)
+            return output
 
         return SwinEncoderOutput(
             last_hidden_state=hidden_states,
@@ -986,7 +995,7 @@ class SwinModel(SwinPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SwinModelOutput]:
+    ) -> Union[Tuple[torch.Tensor], SwinModelOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -1079,7 +1088,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SwinMaskedImageModelingOutput]:
+    ) -> Union[Tuple[torch.Tensor], SwinMaskedImageModelingOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -1193,7 +1202,7 @@ class SwinForImageClassification(SwinPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SwinImageClassifierOutput]:
+    ) -> Union[Tuple[torch.Tensor], SwinImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
