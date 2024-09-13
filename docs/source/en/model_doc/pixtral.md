@@ -31,8 +31,7 @@ Tips:
 ```
 Then, the processor will replace each `[IMG]` token with  a number of `[IMG]` token that depends on the height and the width of the image. Each *row* of the image is separated by a `[IMG_BREAK]` token, and each image is separated by a  `[IMG_END]` token.
 
-This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ) and [Amy Roberts](https://huggingface.co/amyeroberts).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ) and [Amy Roberts](https://huggingface.co/amyeroberts). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 Here is an example of how to run it:
 
@@ -96,3 +95,12 @@ Each image captures a different scene, from a close-up of a dog to expansive nat
 
 [[autodoc]] PixtralModel
     - forward
+
+## PixtralImageProcessor
+
+[[autodoc]] PixtralImageProcessor
+    - preprocess
+
+## PixtralProcessor
+
+[[autodoc]] PixtralProcessor
