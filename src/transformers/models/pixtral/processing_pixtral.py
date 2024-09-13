@@ -37,6 +37,7 @@ def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
+# Copied from transformers.models.pixtral.image_processing_pixtral.BatchMixFeature
 class BatchMixFeature(BatchFeature):
     def to(self, *args, **kwargs) -> "BatchFeature":
         """
