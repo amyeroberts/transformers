@@ -16,8 +16,6 @@ rendered properly in your Markdown viewer.
 
 # Pixtral
 
-# Pixtral
-
 ## Overview
 
 The Pixtral model was released by the Mistral AI team on [Vllm](https://github.com/vllm-project/vllm/pull/8377), where a version of the code can be found!
@@ -26,18 +24,19 @@ The Pixtral model was released by the Mistral AI team on [Vllm](https://github.c
 Tips:
 
 - Pixtral is a multimodal model, the main contribution is the 2d ROPE on the images, and support for arbitrary image size (the images are not padded together nor are they resized)
-- This model follows the `Llava` familiy, meaning image embeddings are placed instead of the `[IMG]` token placeholders. 
+- This model follows the `Llava` familiy, meaning image embeddings are placed instead of the `[IMG]` token placeholders.
 - The format for one or mulitple prompts is the following:
 ```
 "<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
 ```
 Then, the processor will replace each `[IMG]` token with  a number of `[IMG]` token that depends on the height and the width of the image. Each *row* of the image is separated by a `[IMG_BREAK]` token, and each image is separated by a  `[IMG_END]` token.
 
-This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ)
+This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ) and [Amy Roberts](https://huggingface.co/amyeroberts).
+The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 Here is an example of how to run it:
 
-```python 
+```python
 from transformers import AutoModelForConditionalGeneration, AutoProcessor
 
 model_id = "hf-internal-testing/pixtral-12b"
